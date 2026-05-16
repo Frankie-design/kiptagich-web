@@ -60,13 +60,13 @@ def utm_36s_to_latlon(easting, northing):
 # ==========================================
 # 2. GROUND TRUTH REALISTIC DATABASE (UTM METERS)
 # ==========================================
+# Ground-truth metric database registry (Updated with your exact Google Earth points!)
 FARM_DATABASE = {
     "29485731": {"owner": "John Chepkwony", "east": 787900, "north": 9941700, "status": "Satisfactory"},
-    "32019485": {"owner": "Mary Cherotich", "east": 788700, "north": 9941300, "status": "Monitor"},
+    "32019485": {"owner": "Mary Cherotich", "east": 795945.90, "north": 9939533.48, "status": "Monitor"},
     "11405938": {"owner": "David Kiprono", "east": 787200, "north": 9942400, "status": "Critical"},
     "27495811": {"owner": "Grace Kipkemoi", "east": 788200, "north": 9940900, "status": "Satisfactory"}
 }
-
 @app.route('/')
 def index():
     # Create base map safely centered over Kiptagich (-0.526, 35.587)
