@@ -1,16 +1,26 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, jsonify
 import folium
 from pykml import parser
 import os
 
 app = Flask(__name__)
 
+# ==========================================
+# 1. NATIONAL ID FARM DATABASE BLOCK
+# ==========================================
+FARM_DATABASE = {
+    "29485731": {"owner": "John Chepkwony", "lat": -0.528, "lon": 35.585, "status": "Satisfactory"},
+    "32019485": {"owner": "Mary Cherotich", "lat": -0.531, "lon": 35.592, "status": "Monitor"},
+    "11405938": {"owner": "David Kiprono", "lat": -0.522, "lon": 35.579, "status": "Critical"},
+    "27495811": {"owner": "Grace Kipkemoi", "lat": -0.535, "lon": 35.588, "status": "Satisfactory"}
+}
+
 @app.route('/')
 def index():
-    # 1. Create the base map with scale bar
+    # Create the base map with scale bar
     m = folium.Map(location=[-0.526, 35.587], zoom_start=13, control_scale=True)
 
-    # 2. Add Google Satellite Imagery (The layer you need for GIS analysis)
+    # Add Google Satellite Imagery
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         attr='Google Satellite',
@@ -22,7 +32,7 @@ def index():
     # Keep the standard map as an option
     folium.TileLayer('openstreetmap', name='Street Map').add_to(m)
 
-    # 3. Path to your KML
+    # Path to your KML
     kml_file = 'Kiptagich_Ward_Offline.kml'
 
     try:
@@ -39,7 +49,7 @@ def index():
                     c = pair.split(',')
                     points.append([float(c[1]), float(c[0])])
             
-            # Add the boundary with Purple color to separate it from statuses
+            # Add the boundary with Purple color
             folium.Polygon(
                 locations=points,
                 color="#800080", 
@@ -52,11 +62,30 @@ def index():
     except Exception as e:
         print(f"Error loading KML: {e}")
 
-    # 4. Add the Layer Selector to the top-right corner
+    # Add the Layer Selector to the top-right corner
     folium.LayerControl().add_to(m)
 
     map_html = m._repr_html_()
     return render_template('dashboard.html', map_html=map_html)
+
+# ==========================================
+# 2. INTERACTIVE SEARCH ENDPOINT ROUTE
+# ==========================================
+@app.route('/search_farm')
+def search_farm():
+    farm_id = request.args.get('id', '').strip()
+    
+    if farm_id in FARM_DATABASE:
+        farm_info = FARM_DATABASE[farm_id]
+        return jsonify({
+            "id": farm_id,
+            "owner": farm_info["owner"],
+            "lat": farm_info["lat"],
+            "lon": farm_info["lon"],
+            "status": farm_info["status"]
+        })
+    else:
+        return jsonify({"error": f"National ID '{farm_id}' not found in Kiptagich registry."}), 404
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
