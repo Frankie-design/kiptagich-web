@@ -5,9 +5,6 @@ import os
 
 app = Flask(__name__)
 
-# ==========================================
-# DIRECT DECIMAL DEGREES DATABASE REGISTRY
-# ==========================================
 FARM_DATABASE = {
     "29485731": {"owner": "John Chepkwony", "lat": -0.528, "lon": 35.585, "status": "Satisfactory"},
     "32019485": {"owner": "Mary Cherotich", "lat": -0.546811, "lon": 35.659836, "status": "Monitor"},
@@ -21,7 +18,6 @@ def index():
     error_msg = None
     farm_sidebar_data = None
     
-    # Default center coordinates over Kiptagich Ward
     map_center = [-0.526, 35.587]
     zoom_level = 13
     
@@ -32,7 +28,6 @@ def index():
             map_center = [farm_info["lat"], farm_info["lon"]]
             zoom_level = 16  
             
-            # Pack database entries cleanly to ship to the frontend sidebar display panel
             farm_sidebar_data = {
                 "id": search_id,
                 "owner": farm_info["owner"],
@@ -41,10 +36,8 @@ def index():
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
-    # Build the Folium instance safely
     m = folium.Map(location=map_center, zoom_start=zoom_level, control_scale=True)
 
-    # Base Tile layers
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         attr='Google Satellite',
@@ -54,7 +47,6 @@ def index():
     ).add_to(m)
     folium.TileLayer('openstreetmap', name='Street Map').add_to(m)
 
-    # Load and render KML Boundary Line Layout
     kml_file = 'Kiptagich_Ward_Offline.kml'
     try:
         if os.path.exists(kml_file):
@@ -80,14 +72,13 @@ def index():
     except Exception as e:
         print(f"Error loading KML boundary layout: {e}")
 
-    # Add map pin marker
     if farm_info:
         color_map = {"Satisfactory": "green", "Monitor": "orange", "Critical": "red"}
         marker_color = color_map.get(farm_info["status"], "blue")
         
         popup_content = f"""
         <div style='font-family: sans-serif; font-size:13px;'>
-            <b>National ID:</b> {search_id}<br>
+            <b>Owner's ID No:</b> {search_id}<br>
             <b>Farmer:</b> {farm_info['owner']}<br>
             <b>Status:</b> <span style='color:{marker_color};font-weight:bold;'>{farm_info['status']}</span>
         </div>
