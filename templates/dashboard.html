@@ -79,6 +79,23 @@
         }
         #searchBtn:hover { background: #219653; }
         
+        /* NEW STYLING FOR THE OWNER INFO PANEL */
+        .result-card {
+            background-color: #34495e;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #2ecc71;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+        .result-line {
+            margin: 5px 0;
+        }
+        .result-label {
+            color: #bdc3c7;
+            font-weight: bold;
+        }
+        
         .metric-table {
             width: 100%;
             font-size: 13px;
@@ -102,6 +119,19 @@
         
         {% if error_msg %}
         <p style="color: #e74c3c; font-size: 12px; margin-top: -10px; font-weight: bold; margin-bottom: 15px;">⚠️ {{ error_msg }}</p>
+        {% endif %}
+
+        {% if farm_data %}
+        <div class="section-title">Registry Match</div>
+        <div class="result-card" style="border-left-color: {% if farm_data.status == 'Satisfactory' %}#2ecc71{% elif farm_data.status == 'Monitor' %}#f1c40f{% else %}#e74c3c{% endif %};">
+            <div class="result-line"><span class="result-label">Owner Name:</span> {{ farm_data.owner }}</div>
+            <div class="result-line"><span class="result-label">Farm ID/No:</span> No. {{ farm_data.id }}</div>
+            <div class="result-line"><span class="result-label">Status:</span> 
+                <span style="font-weight: bold; color: {% if farm_data.status == 'Satisfactory' %}#2ecc71{% elif farm_data.status == 'Monitor' %}#f1c40f{% else %}#e74c3c{% endif %};">
+                    {{ farm_data.status }}
+                </span>
+            </div>
+        </div>
         {% endif %}
 
         <div class="section-title">Irrigation Status</div>
