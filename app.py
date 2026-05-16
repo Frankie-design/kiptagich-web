@@ -1,5 +1,4 @@
 from flask import Flask, render_template
-from flask import Flask, render_template
 import folium
 from pykml import parser
 import os
@@ -40,13 +39,13 @@ def index():
                     c = pair.split(',')
                     points.append([float(c[1]), float(c[0])])
             
-            # Add the boundary with JKUAT Green color
+            # Add the boundary with Purple color to separate it from statuses
             folium.Polygon(
                 locations=points,
-                color="#2ecc71", 
+                color="#800080", 
                 weight=4,
                 fill=True,
-                fill_opacity=0.1,
+                fill_opacity=0.05,
                 popup="Kiptagich Ward Boundary"
             ).add_to(m)
             
