@@ -10,7 +10,6 @@ app = Flask(__name__)
 # ==========================================
 FARM_DATABASE = {
     "29485731": {"owner": "John Chepkwony", "lat": -0.528, "lon": 35.585, "status": "Satisfactory"},
-    # This entry points exactly to your Ainamoi point from Google Earth!
     "32019485": {"owner": "Mary Cherotich", "lat": -0.546811, "lon": 35.659836, "status": "Monitor"},
     "11405938": {"owner": "David Kiprono", "lat": -0.522, "lon": 35.579, "status": "Critical"},
     "27495811": {"owner": "Grace Kipkemoi", "lat": -0.535, "lon": 35.588, "status": "Satisfactory"}
@@ -18,9 +17,9 @@ FARM_DATABASE = {
 
 @app.route('/')
 def index():
-    # Read search parameter from URL if it exists
     search_id = request.args.get('search_id', '').strip()
     error_msg = None
+    farm_sidebar_data = None
     
     # Default center coordinates over Kiptagich Ward
     map_center = [-0.526, 35.587]
@@ -31,7 +30,14 @@ def index():
         if search_id in FARM_DATABASE:
             farm_info = FARM_DATABASE[search_id]
             map_center = [farm_info["lat"], farm_info["lon"]]
-            zoom_level = 16  # Zoom in close to show the searched farm plot
+            zoom_level = 16  
+            
+            # Pack database entries cleanly to ship to the frontend sidebar display panel
+            farm_sidebar_data = {
+                "id": search_id,
+                "owner": farm_info["owner"],
+                "status": farm_info["status"]
+            }
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
@@ -74,7 +80,7 @@ def index():
     except Exception as e:
         print(f"Error loading KML boundary layout: {e}")
 
-    # If an ID matches, add the marker pin cleanly inside Python before rendering
+    # Add map pin marker
     if farm_info:
         color_map = {"Satisfactory": "green", "Monitor": "orange", "Critical": "red"}
         marker_color = color_map.get(farm_info["status"], "blue")
@@ -96,7 +102,13 @@ def index():
     folium.LayerControl().add_to(m)
     map_html = m._repr_html_()
     
-    return render_template('dashboard.html', map_html=map_html, error_msg=error_msg, current_search=search_id)
+    return render_template(
+        'dashboard.html', 
+        map_html=map_html, 
+        error_msg=error_msg, 
+        current_search=search_id,
+        farm_data=farm_sidebar_data
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
