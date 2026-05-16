@@ -1,128 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiptagich Irrigation Dashboard</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            height: 100vh;
-            background-color: #1a252f;
-        }
-        #sidebar {
-            width: 300px;
-            background-color: #2c3e50;
-            color: #ecf0f1;
-            padding: 20px;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.3);
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-        }
-        #map-container {
-            flex-grow: 1;
-            height: 100%;
-        }
-        h2 { color: #2ecc71; margin-top: 0; }
-        .section-title {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8c8d;
-            margin: 20px 0 10px 0;
-            border-bottom: 1px solid #34495e;
-            padding-bottom: 5px;
-        }
-        .status-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        .dot {
-            height: 12px;
-            width: 12px;
-            border-radius: 50%;
-            margin-right: 10px;
-            display: inline-block;
-        }
-        .green { background-color: #2ecc71; }
-        .yellow { background-color: #f1c40f; }
-        .red { background-color: #e74c3c; }
-        
-        /* Interactive Search Layout styling */
-        .search-container {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 20px;
-        }
-        #farmSearch {
-            flex-grow: 1;
-            padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #34495e;
-            background: #1a252f;
-            color: white;
-            font-size: 13px;
-        }
-        #searchBtn {
-            padding: 10px 15px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        #searchBtn:hover { background: #219653; }
-        
-        .metric-table {
-            width: 100%;
-            font-size: 13px;
-            border-collapse: collapse;
-        }
-        .metric-table td { padding: 6px 0; }
-        .metric-value { text-align: right; font-weight: bold; }
-    </style>
-</head>
-<body>
-
-    <div id="sidebar">
-        <h2>Kiptagich Ward</h2>
-        <p style="font-size: 12px; color: #bdf2d5; margin-top: -10px;">GNSS-R Irrigation System</p>
-        
-        <div class="section-title">Search Registry</div>
-        <div class="search-container">
-            <input type="text" id="farmSearch" placeholder="Enter National ID (e.g. 32019485)">
-            <button id="searchBtn" onclick="searchCoordinates()">Go</button>
-        </div>
-
-        <div class="section-title">Irrigation Status</div>
-        <div class="status-item"><span class="dot green"></span> Satisfactory</div>
-        <div class="status-item"><span class="dot yellow"></span> Monitor</div>
-        <div class="status-item"><span class="dot red"></span> Critical (Irrigate)</div>
-
-        <div class="section-title">System Metrics</div>
-        <table class="metric-table">
-            <tr><td>Data Source:</td><td class="metric-value" style="color: #2ecc71;">CYGNSS / Sentinel-2</td></tr>
-            <tr><td>Last Update:</td><td class="metric-value">11-May-2026</td></tr>
-            <tr><td>Network:</td><td class="metric-value" style="color: #e67e22;">Offline Mode</td></tr>
-        </table>
-
-        <div class="section-title">Project Team</div>
-        <p style="font-size: 13px; margin: 5px 0; color: #bdc3c7;">Karen Charity<br>Samantha Cherop<br>Franky Brian</p>
-    </div>
-
-    <div id="map-container">
-        {{ map_html | safe }}
-    </div>
-
-    <script>
+<script>
     function searchCoordinates() {
         var farmId = document.getElementById('farmSearch').value.trim();
         if (!farmId) {
@@ -139,17 +15,22 @@
                     return;
                 }
                 
-                // Scan the webpage environment to capture the Folium map instance
-                var mapObject = null;
-                for (var key in window) {
-                    if (key.startsWith('map_') && typeof window[key].setView === 'function') {
-                        mapObject = window[key];
-                        break;
+                // ULTIMATE DIRECT BYPASS: Find the map object directly through the HTML element
+                var mapContainer = document.querySelector('.leaflet-container');
+                var mapObject = mapContainer ? mapContainer._leaflet_map : null;
+                
+                // Fallback plan if the direct hidden variable is blocked
+                if (!mapObject) {
+                    for (var key in window) {
+                        if (key.startsWith('map_') && typeof window[key].setView === 'function') {
+                            mapObject = window[key];
+                            break;
+                        }
                     }
                 }
                 
                 if (mapObject) {
-                    // Fly right to the farm coordinates
+                    // Fly smoothly right to the farm coordinates
                     mapObject.setView([data.lat, data.lon], 16);
                     
                     // Match marker hex colors with status metrics
@@ -170,6 +51,8 @@
                         .addTo(mapObject)
                         .bindPopup(`<b>National ID:</b> ${data.id}<br><b>Farmer:</b> ${data.owner}<br><b>Status:</b> <span style="color:${markerColor}; font-weight:bold;">${data.status}</span>`)
                         .openPopup();
+                } else {
+                    alert("System layout loading. Please wait 3 seconds and try again.");
                 }
             })
             .catch(err => {
@@ -178,5 +61,3 @@
             });
     }
     </script>
-</body>
-</html>
