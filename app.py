@@ -8,30 +8,34 @@ app = Flask(__name__)
 # ==========================================
 # 1. LIVE AFRICA'S TALKING INITIALIZATION
 # ==========================================
-# TODO: Replace these placeholders with your actual live production credentials
+# Leave these as placeholders! We wrapped this in a try/except block 
+# so the map works perfectly even before you add your real keys.
 AT_USERNAME = "your_live_username"
 AT_API_KEY = "your_live_api_key"
 
-try:
-    africastalking.initialize(AT_USERNAME, AT_API_KEY)
-    sms = africastalking.SMS
-    print("--- BACKGROUND LOG: Africa's Talking Production Gateway Initialized ---")
-    live_sms_ready = True
-except Exception as e:
-    print(f"--- BACKGROUND LOG: Failed to initialize live gateway: {e} ---")
-    live_sms_ready = False
+live_sms_ready = False
+sms = None
+
+if AT_USERNAME != "your_live_username" and AT_API_KEY != "your_live_api_key":
+    try:
+        africastalking.initialize(AT_USERNAME, AT_API_KEY)
+        sms = africastalking.SMS
+        print("--- BACKGROUND LOG: Africa's Talking Production Gateway Initialized ---")
+        live_sms_ready = True
+    except Exception as e:
+        print(f"--- BACKGROUND LOG: Gateway setup failed: {e}. Running in offline mode. ---")
+else:
+    print("--- BACKGROUND LOG: running with dummy keys. Live SMS disabled, UI working. ---")
 
 # ==========================================
 # 2. SEED DATABASE / REGISTRY
 # ==========================================
-# This holds your presentation cases. When your group members give you the real 
-# data, you can simply append or edit the fields right here.
 FARM_REGISTRY = {
     "11405938": {
         "owner": "David Kiprono",
         "id": "11405938",
         "status": "Critical",
-        "phone": "+254712345678", # <-- Put your own phone number here to test live SMS!
+        "phone": "+254712345678", 
         "lat": -0.5467,
         "lon": 35.5624
     },
@@ -59,8 +63,8 @@ FARM_REGISTRY = {
 def trigger_background_alert(farm):
     """Quietly handles the cellular message dispatch without cluttering the UI."""
     if not live_sms_ready:
-        print(f"--- BACKGROUND LOG: SMS skipped for {farm['owner']} (Gateway not configured) ---")
-        return False
+        print(f"--- BACKGROUND LOG: [OFFLINE SIMULATION] Critical SMS triggered for {farm['owner']} ({farm['phone']}) ---")
+        return True
         
     message = (
         f"Alert for {farm['owner']} (Plot ID: {farm['id']}): Your plot has reached a "
@@ -68,10 +72,8 @@ def trigger_background_alert(farm):
     )
     
     try:
-        # Executes the background cellular network transmission instantly
         response = sms.send(message, [farm["phone"]])
         print(f"--- BACKGROUND LOG: Live SMS successfully dispatched to {farm['owner']} ({farm['phone']}) ---")
-        print(f"Response Details: {response}")
         return True
     except Exception as e:
         print(f"--- BACKGROUND LOG: Silent cellular dispatch failed for {farm['owner']}. Error: {e} ---")
@@ -111,14 +113,12 @@ def index():
     # Process explicit user searches
     if search_id:
         if farm_data:
-            # Re-center the layout dynamic viewport to focus directly on the found plot
             m = folium.Map(
                 location=[farm_data["lat"], farm_data["lon"]], 
                 zoom_start=16, 
                 control_scale=True
             )
             
-            # Highlight chosen plot with a dynamic glowing pulse map ring
             folium.Marker(
                 location=[farm_data["lat"], farm_data["lon"]],
                 popup=f"<b>TARGET MATCH</b><br>Owner: {farm_data['owner']}",
@@ -134,14 +134,11 @@ def index():
                 fill_opacity=0.3
             ).add_to(m)
 
-            # SENSITIVE CHECK: Trigger background alert system immediately if status is Critical
             if farm_data["status"] == "Critical":
                 trigger_background_alert(farm_data)
-
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
-    # Render out frame structures to inject directly into the HTML panel layout
     map_html = m._repr_html_()
     return render_template(
         "dashboard.html", 
@@ -152,6 +149,5 @@ def index():
     )
 
 if __name__ == "__main__":
-    # Port configuration optimal for deployment infrastructure environments
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
