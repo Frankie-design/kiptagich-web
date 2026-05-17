@@ -33,9 +33,7 @@ FARM_REGISTRY = {
     }
 }
 
-# Helper function to extract coordinate paths directly from your repo's KML
 def load_kml_boundary():
-    # Looks for any .kml file inside your project directory
     kml_files = [f for f in os.listdir('.') if f.endswith('.kml')]
     if not kml_files:
         return None
@@ -46,16 +44,22 @@ def load_kml_boundary():
         k = kml.KML()
         k.from_string(doc)
         
-        # Dig into the KML structure to extract geometries
-        features = list(k.features())
-        if hasattr(features[0], 'features'):
-            sub_features = list(features[0].features())
-            for feature in sub_features:
-                if feature.geometry:
-                    geom = shape(feature.geometry)
-                    if geom.geom_type == 'Polygon':
-                        # Convert (lon, lat) to Folium's required (lat, lon)
-                        return [[lat, lon] for lon, lat in geom.exterior.coords]
+        # Recursive check to extract complex nested geometries
+        def extract_polygons(element):
+            if hasattr(element, 'features'):
+                for sub_element in element.features():
+                    yield from extract_polygons(sub_element)
+            if hasattr(element, 'geometry') and element.geometry:
+                geom = shape(element.geometry)
+                if geom.geom_type == 'Polygon':
+                    yield geom
+                elif geom.geom_type == 'MultiPolygon':
+                    for poly in geom.geoms:
+                        yield poly
+
+        all_polygons = list(extract_polygons(k))
+        if all_polygons:
+            return [[lat, lon] for lon, lat in all_polygons[0].exterior.coords]
     except Exception as e:
         print(f"Error parsing KML: {e}")
     return None
@@ -69,22 +73,18 @@ def index():
     farm_data = FARM_REGISTRY.get(search_id)
     error_msg = None
 
-    # Determine default zoom orientation based on user searching behavior
     if search_id and farm_data:
         map_center = [farm_data["lat"], farm_data["lon"]]
         zoom_level = 16
     else:
+        # Default map center aligned around Kiptagich Ward coordinates
         map_center = [-0.5450, 35.5650]
-        zoom_level = 14
+        zoom_level = 13
 
-    # Initialize map canvas without standard hardcoded backgrounds
     m = folium.Map(location=map_center, zoom_start=zoom_level, tiles=None, control_scale=True)
 
-    # ------------------------------------------
-    # RESTORE SATELLITE & STREET CONTROL LAYERS
-    # ------------------------------------------
+    # Base Map Tiles
     folium.TileLayer("OpenStreetMap", name="OpenStreetMap Map").add_to(m)
-    
     folium.TileLayer(
         tiles="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
         attr="Google Satellite",
@@ -93,11 +93,8 @@ def index():
         control=True
     ).add_to(m)
 
-    # ------------------------------------------
-    # INJECT ORIGINAL KML LAYER BOUNDARY
-    # ------------------------------------------
+    # Injecting the detailed geometric boundary layer
     kml_polygon_coords = load_kml_boundary()
-    
     if kml_polygon_coords:
         folium.Polygon(
             locations=kml_polygon_coords,
@@ -108,14 +105,8 @@ def index():
             fill_opacity=0.05,
             popup="Kiptagich True Boundary"
         ).add_to(m)
-    else:
-        # Emergency backup shape if the repository KML file name is misplaced
-        backup_boundary = [[-0.5332, 35.5458], [-0.5305, 35.5532], [-0.5595, 35.6021], [-0.5826, 35.5932], [-0.5332, 35.5458]]
-        folium.Polygon(locations=backup_boundary, color="purple", weight=2, fill=False).add_to(m)
 
-    # ------------------------------------------
-    # RENDER STANDARD REGISTRY PINS
-    # ------------------------------------------
+    # Render Registry Pins
     for fid, f in FARM_REGISTRY.items():
         p_color = "red" if f["status"] == "Critical" else ("orange" if f["status"] == "Monitor" else "green")
         folium.Marker(
@@ -124,9 +115,7 @@ def index():
             icon=folium.Icon(color=p_color, icon="info-sign")
         ).add_to(m)
 
-    # ------------------------------------------
-    # HIGHLIGHT SEARCH TARGET
-    # ------------------------------------------
+    # Highlight Search Target
     if search_id:
         if farm_data:
             folium.Marker(
@@ -134,7 +123,6 @@ def index():
                 popup=f"<b>TARGET MATCH</b><br>Owner: {farm_data['owner']}",
                 icon=folium.Icon(color="darkpurple", icon="star")
             ).add_to(m)
-            
             folium.CircleMarker(
                 location=[farm_data["lat"], farm_data["lon"]],
                 radius=25,
@@ -146,9 +134,9 @@ def index():
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
-    # Turn layer selection map switcher widget back on
     folium.LayerControl(position="topright").add_to(m)
 
+    # Clean injection directly into your dashboard safe tag
     map_html = m._repr_html_()
     return render_template(
         "dashboard.html", 
