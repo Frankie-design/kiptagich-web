@@ -1,8 +1,7 @@
 import os
+import re
 from flask import Flask, render_template, request
 import folium
-from fastkml import kml
-from shapely.geometry import shape
 
 app = Flask(__name__)
 
@@ -33,39 +32,49 @@ FARM_REGISTRY = {
     }
 }
 
+# ==========================================
+# 2. BULLETPROOF KML BOUNDARY PARSER
+# ==========================================
 def load_kml_boundary():
-    kml_files = [f for f in os.listdir('.') if f.endswith('.kml')]
-    if not kml_files:
-        return None
+    # Targets your exact repository file name directly
+    target_file = "Kiptagich_Ward_Offline.kml"
     
-    try:
-        with open(kml_files[0], 'rb') as f:
-            doc = f.read()
-        k = kml.KML()
-        k.from_string(doc)
+    if not os.path.exists(target_file):
+        print(f"CRITICAL: {target_file} was not found in the root directory!")
+        return None
         
-        # Recursive check to extract complex nested geometries
-        def extract_polygons(element):
-            if hasattr(element, 'features'):
-                for sub_element in element.features():
-                    yield from extract_polygons(sub_element)
-            if hasattr(element, 'geometry') and element.geometry:
-                geom = shape(element.geometry)
-                if geom.geom_type == 'Polygon':
-                    yield geom
-                elif geom.geom_type == 'MultiPolygon':
-                    for poly in geom.geoms:
-                        yield poly
-
-        all_polygons = list(extract_polygons(k))
-        if all_polygons:
-            return [[lat, lon] for lon, lat in all_polygons[0].exterior.coords]
+    try:
+        with open(target_file, 'r', encoding='utf-8', errors='ignore') as f:
+            kml_content = f.read()
+        
+        # Pulls the raw text inside the <coordinates> tags directly using regex.
+        # This completely bypasses fastkml folder nesting structural failures.
+        coord_match = re.search(r'<coordinates>(.*?)</coordinates>', kml_content, re.DOTALL)
+        
+        if coord_match:
+            coord_string = coord_match.group(1).strip()
+            coordinates_list = []
+            
+            # Split the coordinate pairs (separated by spaces or tabs in the KML file)
+            for chunk in coord_string.split():
+                if ',' in chunk:
+                    parts = chunk.split(',')
+                    # KML standard is (Longitude, Latitude). Folium requires (Latitude, Longitude).
+                    lon = float(parts[0])
+                    lat = float(parts[1])
+                    coordinates_list.append([lat, lon])
+            
+            if coordinates_list:
+                print(f"SUCCESS: Extracted {len(coordinates_list)} boundary coordinates.")
+                return coordinates_list
+                
+        print("WARNING: Found KML file, but could not locate a valid <coordinates> block.")
     except Exception as e:
-        print(f"Error parsing KML: {e}")
+        print(f"Error reading raw KML data: {e}")
     return None
 
 # ==========================================
-# 2. ROUTING & MAP GENERATION LOGIC
+# 3. ROUTING & MAP GENERATION LOGIC
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
@@ -77,10 +86,11 @@ def index():
         map_center = [farm_data["lat"], farm_data["lon"]]
         zoom_level = 16
     else:
-        # Default map center aligned around Kiptagich Ward coordinates
+        # Aligned map center view over Kiptagich Ward
         map_center = [-0.5450, 35.5650]
         zoom_level = 13
 
+    # Initialize empty map canvas
     m = folium.Map(location=map_center, zoom_start=zoom_level, tiles=None, control_scale=True)
 
     # Base Map Tiles
@@ -93,7 +103,7 @@ def index():
         control=True
     ).add_to(m)
 
-    # Injecting the detailed geometric boundary layer
+    # Extract and inject the true Kiptagich Ward Boundary
     kml_polygon_coords = load_kml_boundary()
     if kml_polygon_coords:
         folium.Polygon(
@@ -106,7 +116,7 @@ def index():
             popup="Kiptagich True Boundary"
         ).add_to(m)
 
-    # Render Registry Pins
+    # Render Standard Registry Pins
     for fid, f in FARM_REGISTRY.items():
         p_color = "red" if f["status"] == "Critical" else ("orange" if f["status"] == "Monitor" else "green")
         folium.Marker(
@@ -123,6 +133,7 @@ def index():
                 popup=f"<b>TARGET MATCH</b><br>Owner: {farm_data['owner']}",
                 icon=folium.Icon(color="darkpurple", icon="star")
             ).add_to(m)
+            
             folium.CircleMarker(
                 location=[farm_data["lat"], farm_data["lon"]],
                 radius=25,
@@ -134,9 +145,10 @@ def index():
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
+    # Turn layer selection widget back on
     folium.LayerControl(position="topright").add_to(m)
 
-    # Clean injection directly into your dashboard safe tag
+    # Render HTML map layer structure
     map_html = m._repr_html_()
     return render_template(
         "dashboard.html", 
