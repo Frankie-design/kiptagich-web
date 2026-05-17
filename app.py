@@ -5,7 +5,7 @@ import folium
 app = Flask(__name__)
 
 # ==========================================
-# 1. CORE FARM DATABASE REGISTRY
+# 1. DATABASE REGISTRY
 # ==========================================
 FARM_REGISTRY = {
     "11405938": {
@@ -32,7 +32,7 @@ FARM_REGISTRY = {
 }
 
 # ==========================================
-# 2. ROUTING & MAP GENERATION LOGIC
+# 2. CORE ROUTING & MAP GENERATION
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
@@ -40,39 +40,21 @@ def index():
     farm_data = FARM_REGISTRY.get(search_id)
     error_msg = None
 
-    # Determine map center focus based on active query
+    # Base interactive map centered right on Kiptagich Ward area
     if search_id and farm_data:
-        map_center = [farm_data["lat"], farm_data["lon"]]
-        zoom_level = 16
+        m = folium.Map(
+            location=[farm_data["lat"], farm_data["lon"]], 
+            zoom_start=16, 
+            control_scale=True
+        )
     else:
-        map_center = [-0.5450, 35.5650]
-        zoom_level = 13
+        m = folium.Map(
+            location=[-0.5450, 35.5650], 
+            zoom_start=14, 
+            control_scale=True
+        )
 
-    # Initialize your original map setup
-    m = folium.Map(
-        location=map_center, 
-        zoom_start=zoom_level, 
-        control_scale=True
-    )
-
-    # Add OpenStreetMap Base Layer
-    folium.TileLayer('openstreetmap').add_to(m)
-
-    # ------------------------------------------
-    # ORIGINAL MAP LAYER LOGIC (Google Tile Integration)
-    # ------------------------------------------
-    # This injects your satellite layer back into the map canvas
-    folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        attr='Google Satellite',
-        name='Google Satellite',
-        overlay=True,
-        control=True
-    ).add_to(m)
-
-    # ------------------------------------------
-    # PLOT REGISTRY FARM MARKERS
-    # ------------------------------------------
+    # Plot out the foundational pins
     for fid, f in FARM_REGISTRY.items():
         if f["status"] == "Critical":
             p_color = "red"
@@ -87,11 +69,10 @@ def index():
             icon=folium.Icon(color=p_color, icon="info-sign")
         ).add_to(m)
 
-    # ------------------------------------------
-    # HIGHLIGHT ACTIVE SEARCH SELECTION
-    # ------------------------------------------
+    # Process user search query
     if search_id:
         if farm_data:
+            # Highlight target plot
             folium.Marker(
                 location=[farm_data["lat"], farm_data["lon"]],
                 popup=f"<b>TARGET MATCH</b><br>Owner: {farm_data['owner']}",
@@ -106,10 +87,6 @@ def index():
                 fill_color="#9b59b6",
                 fill_opacity=0.3
             ).add_to(m)
-            
-            # Safe back-end logging statement that won't disrupt dependencies
-            if farm_data["status"] == "Critical":
-                print(f"--- SIMULATION LOG: Critical threshold alert triggered for {farm_data['owner']} ---")
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
