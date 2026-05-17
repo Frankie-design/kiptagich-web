@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request
 import folium
 from pykml import parser
 import os
@@ -7,8 +7,9 @@ import africastalking
 app = Flask(__name__)
 
 # ==========================================
-# LIVE AFRICA'S TALKING CREDENTIALS
+# AFRICA'S TALKING ACCOUNT CONFIGURATION
 # ==========================================
+# To go live later: Change "sandbox" to your real username, and swap the API key
 AT_USERNAME = "sandbox"
 AT_API_KEY = "atsk_f2466c6356562f03cd3bb0db88084508d08c1cecfe1b2afa079b69287c38a8c76f4c8c57" 
 
@@ -16,12 +17,12 @@ sms_gateway = None
 try:
     africastalking.initialize(AT_USERNAME, AT_API_KEY)
     sms_gateway = africastalking.SMS
-    print("SMS Gateway successfully mapped to sandbox channel.")
+    print("SMS Gateway ready to handle automated background requests.")
 except Exception as e:
-    print(f"SMS Gateway bypassed safely during startup sequence: {e}")
+    print(f"SMS Framework bypassed safely: {e}")
 
 # ==========================================
-# SYSTEM DATABASE REGISTRY (WITH REAL NUMBERS)
+# SYSTEM DATABASE REGISTRY
 # ==========================================
 FARM_DATABASE = {
     "29485731": {"owner": "John Chepkwony", "phone": "+254768911014", "lat": -0.528, "lon": 35.585, "status": "Satisfactory"},
@@ -33,9 +34,9 @@ FARM_DATABASE = {
 @app.route('/')
 def index():
     search_id = request.args.get('search_id', '').strip()
-    sms_status = request.args.get('sms_status', '')
     error_msg = None
     farm_sidebar_data = None
+    background_sms_sent = False
     
     map_center = [-0.526, 35.587]
     zoom_level = 13
@@ -46,6 +47,19 @@ def index():
             farm_info = FARM_DATABASE[search_id]
             map_center = [farm_info["lat"], farm_info["lon"]]
             zoom_level = 16  
+            
+            # ---------------------------------------------------------------
+            # AUTOMATED BACKGROUND SMS LOGIC
+            # ---------------------------------------------------------------
+            # If the remote sensing analysis evaluates to Critical, dispatch SMS instantly!
+            if farm_info["status"] == "Critical" and sms_gateway:
+                try:
+                    message_body = f"Kiptagich System Alert: Hello {farm_info['owner']}, GNSS-R data shows soil moisture drops below threshold on your plot. Please irrigate immediately."
+                    sms_gateway.send(message=message_body, recipients=[farm_info['phone']])
+                    background_sms_sent = True
+                    print(f"Background alert automatically sent to {farm_info['owner']}.")
+                except Exception as e:
+                    print(f"Background automatic transmission error: {e}")
             
             farm_sidebar_data = {
                 "id": search_id,
@@ -118,25 +132,8 @@ def index():
         error_msg=error_msg, 
         current_search=search_id,
         farm_data=farm_sidebar_data,
-        sms_status=sms_status
+        background_sms_sent=background_sms_sent
     )
-
-@app.route('/send_alert', methods=['POST'])
-def send_alert():
-    farm_id = request.form.get('farm_id')
-    if farm_id in FARM_DATABASE:
-        farm = FARM_DATABASE[farm_id]
-        message_body = f"Kiptagich System Alert: Hello {farm['owner']}, GNSS-R data shows soil moisture drops below threshold on your plot. Please irrigate immediately."
-        
-        try:
-            if sms_gateway:
-                sms_gateway.send(message=message_body, recipients=[farm['phone']])
-                return redirect(url_for('index', search_id=farm_id, sms_status="success"))
-        except Exception as e:
-            print(f"Failed to transmit SMS: {e}")
-            return redirect(url_for('index', search_id=farm_id, sms_status="error"))
-            
-    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
