@@ -5,7 +5,7 @@ import folium
 app = Flask(__name__)
 
 # ==========================================
-# 1. DATABASE REGISTRY
+# 1. CORE FARM REGISTRY DATABASE
 # ==========================================
 FARM_REGISTRY = {
     "11405938": {
@@ -32,7 +32,7 @@ FARM_REGISTRY = {
 }
 
 # ==========================================
-# 2. CORE ROUTING & MAP GENERATION
+# 2. ROUTING & INTERACTIVE MAP VIEW
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
@@ -40,8 +40,7 @@ def index():
     farm_data = FARM_REGISTRY.get(search_id)
     error_msg = None
 
-    # 1. Create the primary map view centered on Kiptagich
-    # If a farm is searched, zoom into it; otherwise, show the full ward overview
+    # Focus map: zoom to farm if searched, otherwise display full ward view
     if search_id and farm_data:
         m = folium.Map(
             location=[farm_data["lat"], farm_data["lon"]], 
@@ -51,44 +50,32 @@ def index():
     else:
         m = folium.Map(
             location=[-0.5450, 35.5650], 
-            zoom_start=14, 
+            zoom_start=13, 
             control_scale=True
         )
 
-    # 2. LOAD WARD BOUNDARY
-    # If your original code read a GeoJSON file (e.g., 'kiptagich.geojson'), 
-    # it gets safely injected right here:
+    # ------------------------------------------
+    # DYNAMIC LAYER: TRUE KIPTAGICH WARD BOUNDARY
+    # ------------------------------------------
+    # Looking for 'kiptagich.geojson' or 'kiptagich.kml' inside the static/ folder
     geojson_path = os.path.join("static", "kiptagich.geojson")
+    
     if os.path.exists(geojson_path):
         folium.GeoJson(
             geojson_path,
             name="Kiptagich Ward Boundary",
             style_function=lambda x: {
                 "color": "purple",
-                "weight": 3,
+                "weight": 4,
                 "fillColor": "purple",
-                "fillOpacity": 0.05
+                "fillOpacity": 0.03
             }
         ).add_to(m)
     else:
-        # Fallback detailed coordinate trace to loop the ward boundary if file isn't used
-        detailed_ward_coords = [
-            [-0.5350, 35.5500], [-0.5320, 35.5700], [-0.5400, 35.5850],
-            [-0.5420, 35.5950], [-0.5500, 35.5980], [-0.5550, 35.5800],
-            [-0.5650, 35.5750], [-0.5600, 35.5600], [-0.5500, 35.5450],
-            [-0.5400, 35.5420], [-0.5350, 35.5500]
-        ]
-        folium.Polygon(
-            locations=detailed_ward_coords,
-            color="purple",
-            weight=3,
-            fill=True,
-            fill_color="purple",
-            fill_opacity=0.05,
-            popup="Kiptagich Ward"
-        ).add_to(m)
+        # If the file naming differs, this prints to your Render logs to track it down
+        print(f"⚠️ Map warning: Looked for {geojson_path} but it was missing.")
 
-    # 3. PLOT THE FARM MARKERS
+    # Render data registry pins
     for fid, f in FARM_REGISTRY.items():
         if f["status"] == "Critical":
             p_color = "red"
@@ -103,7 +90,7 @@ def index():
             icon=folium.Icon(color=p_color, icon="info-sign")
         ).add_to(m)
 
-    # 4. HIGHLIGHT SEARCH TARGET IF ACTIVE
+    # Dynamic target highlight matching
     if search_id:
         if farm_data:
             folium.Marker(
@@ -120,6 +107,10 @@ def index():
                 fill_color="#9b59b6",
                 fill_opacity=0.3
             ).add_to(m)
+            
+            # Pure local print tracking for SMS workflow simulation
+            if farm_data["status"] == "Critical":
+                print(f"--- SIMULATION LOG: Critical status alert for {farm_data['owner']} triggered successfully. ---")
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
