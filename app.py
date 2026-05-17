@@ -1,6 +1,8 @@
 import os
 from flask import Flask, render_template, request
 import folium
+from fastkml import kml
+from shapely.geometry import shape
 
 app = Flask(__name__)
 
@@ -31,8 +33,35 @@ FARM_REGISTRY = {
     }
 }
 
+# Helper function to extract coordinate paths directly from your repo's KML
+def load_kml_boundary():
+    # Looks for any .kml file inside your project directory
+    kml_files = [f for f in os.listdir('.') if f.endswith('.kml')]
+    if not kml_files:
+        return None
+    
+    try:
+        with open(kml_files[0], 'rb') as f:
+            doc = f.read()
+        k = kml.KML()
+        k.from_string(doc)
+        
+        # Dig into the KML structure to extract geometries
+        features = list(k.features())
+        if hasattr(features[0], 'features'):
+            sub_features = list(features[0].features())
+            for feature in sub_features:
+                if feature.geometry:
+                    geom = shape(feature.geometry)
+                    if geom.geom_type == 'Polygon':
+                        # Convert (lon, lat) to Folium's required (lat, lon)
+                        return [[lat, lon] for lon, lat in geom.exterior.coords]
+    except Exception as e:
+        print(f"Error parsing KML: {e}")
+    return None
+
 # ==========================================
-# 2. CORE ROUTING & MAP GENERATION LOGIC
+# 2. ROUTING & MAP GENERATION LOGIC
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
@@ -40,73 +69,55 @@ def index():
     farm_data = FARM_REGISTRY.get(search_id)
     error_msg = None
 
-    # Base Map Center Location
+    # Determine default zoom orientation based on user searching behavior
     if search_id and farm_data:
-        center_lat, center_lon = farm_data["lat"], farm_data["lon"]
-        start_zoom = 15
+        map_center = [farm_data["lat"], farm_data["lon"]]
+        zoom_level = 16
     else:
-        center_lat, center_lon = -0.5490, 35.5720
-        start_zoom = 13
+        map_center = [-0.5450, 35.5650]
+        zoom_level = 14
 
-    # Initialize map WITHOUT default tiles to allow clean layer switching
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=start_zoom, tiles=None, control_scale=True)
+    # Initialize map canvas without standard hardcoded backgrounds
+    m = folium.Map(location=map_center, zoom_start=zoom_level, tiles=None, control_scale=True)
 
     # ------------------------------------------
-    # MAP LAYERS (STREETS & SATELLITE VIEW)
+    # RESTORE SATELLITE & STREET CONTROL LAYERS
     # ------------------------------------------
-    folium.TileLayer(
-        tiles="OpenStreetMap", 
-        name="OpenStreetMap"
-    ).add_to(m)
+    folium.TileLayer("OpenStreetMap", name="OpenStreetMap Map").add_to(m)
     
     folium.TileLayer(
         tiles="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
         attr="Google Satellite",
-        name="Google Satellite",
+        name="Google Satellite View",
         overlay=False,
         control=True
     ).add_to(m)
 
     # ------------------------------------------
-    # ORIGINAL DETAILED KIPTAGICH WARD BOUNDARY
+    # INJECT ORIGINAL KML LAYER BOUNDARY
     # ------------------------------------------
-    real_kiptagich_boundary = [
-        [-0.5332, 35.5458], [-0.5305, 35.5532], [-0.5284, 35.5654], 
-        [-0.5321, 35.5712], [-0.5365, 35.5723], [-0.5401, 35.5784], 
-        [-0.5421, 35.5802], [-0.5460, 35.5804], [-0.5495, 35.5760], 
-        [-0.5512, 35.5714], [-0.5543, 35.5721], [-0.5574, 35.5778], 
-        [-0.5582, 35.5824], [-0.5571, 35.5902], [-0.5580, 35.5976], 
-        [-0.5595, 35.6021], [-0.5632, 35.6042], [-0.5668, 35.6035], 
-        [-0.5694, 35.6001], [-0.5732, 35.5984], [-0.5824, 35.5982], 
-        [-0.5826, 35.5932], [-0.5765, 35.5904], [-0.5741, 35.5851], 
-        [-0.5744, 35.5782], [-0.5721, 35.5734], [-0.5725, 35.5645], 
-        [-0.5748, 35.5582], [-0.5762, 35.5512], [-0.5721, 35.5424], 
-        [-0.5642, 35.5342], [-0.5562, 35.5412], [-0.5521, 35.5484], 
-        [-0.5482, 35.5451], [-0.5441, 35.5398], [-0.5385, 35.5402], 
-        [-0.5332, 35.5458]
-    ]
-
-    folium.Polygon(
-        locations=real_kiptagich_boundary,
-        color="purple",
-        weight=4,
-        fill=True,
-        fill_color="purple",
-        fill_opacity=0.01,
-        popup="Kiptagich Ward Boundary"
-    ).add_to(m)
+    kml_polygon_coords = load_kml_boundary()
+    
+    if kml_polygon_coords:
+        folium.Polygon(
+            locations=kml_polygon_coords,
+            color="purple",
+            weight=4,
+            fill=True,
+            fill_color="purple",
+            fill_opacity=0.05,
+            popup="Kiptagich True Boundary"
+        ).add_to(m)
+    else:
+        # Emergency backup shape if the repository KML file name is misplaced
+        backup_boundary = [[-0.5332, 35.5458], [-0.5305, 35.5532], [-0.5595, 35.6021], [-0.5826, 35.5932], [-0.5332, 35.5458]]
+        folium.Polygon(locations=backup_boundary, color="purple", weight=2, fill=False).add_to(m)
 
     # ------------------------------------------
     # RENDER STANDARD REGISTRY PINS
     # ------------------------------------------
     for fid, f in FARM_REGISTRY.items():
-        if f["status"] == "Critical":
-            p_color = "red"
-        elif f["status"] == "Monitor":
-            p_color = "orange"
-        else:
-            p_color = "green"
-
+        p_color = "red" if f["status"] == "Critical" else ("orange" if f["status"] == "Monitor" else "green")
         folium.Marker(
             location=[f["lat"], f["lon"]],
             popup=f"Owner: {f['owner']}<br>ID: {f['id']}<br>Status: {f['status']}",
@@ -114,7 +125,7 @@ def index():
         ).add_to(m)
 
     # ------------------------------------------
-    # TARGET SELECTION HIGHLIGHT MATCHING
+    # HIGHLIGHT SEARCH TARGET
     # ------------------------------------------
     if search_id:
         if farm_data:
@@ -135,7 +146,7 @@ def index():
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
-    # Add the layer control panel back to the top right corner
+    # Turn layer selection map switcher widget back on
     folium.LayerControl(position="topright").add_to(m)
 
     map_html = m._repr_html_()
