@@ -12,12 +12,13 @@ app = Flask(__name__)
 AT_USERNAME = "sandbox"
 AT_API_KEY = "atsk_f2466c6356562f03cd3bb0db88084508d08c1cecfe1b2afa079b69287c38a8c76f4c8c57" 
 
+sms_gateway = None
 try:
     africastalking.initialize(AT_USERNAME, AT_API_KEY)
     sms_gateway = africastalking.SMS
+    print("SMS Gateway successfully mapped to sandbox channel.")
 except Exception as e:
-    print(f"SMS Gateway initialization log: {e}")
-    sms_gateway = None
+    print(f"SMS Gateway bypassed safely during startup sequence: {e}")
 
 # ==========================================
 # SYSTEM DATABASE REGISTRY (WITH REAL NUMBERS)
@@ -46,6 +47,7 @@ def index():
             map_center = [farm_info["lat"], farm_info["lon"]]
             zoom_level = 16  
             
+            # This must build seamlessly for the UI template to render the button
             farm_sidebar_data = {
                 "id": search_id,
                 "owner": farm_info["owner"],
@@ -104,39 +106,4 @@ def index():
         """
         folium.Marker(
             location=[farm_info["lat"], farm_info["lon"]],
-            popup=folium.Popup(popup_content, max_width=250),
-            icon=folium.Icon(color=marker_color, icon="info-sign")
-        ).add_to(m)
-
-    folium.LayerControl().add_to(m)
-    map_html = m._repr_html_()
-    
-    return render_template(
-        'dashboard.html', 
-        map_html=map_html, 
-        error_msg=error_msg, 
-        current_search=search_id,
-        farm_data=farm_sidebar_data,
-        sms_status=sms_status
-    )
-
-@app.route('/send_alert', methods=['POST'])
-def send_alert():
-    farm_id = request.form.get('farm_id')
-    if farm_id in FARM_DATABASE:
-        farm = FARM_DATABASE[farm_id]
-        message_body = f"Kiptagich System Alert: Hello {farm['owner']}, GNSS-R data shows soil moisture drops below threshold on your plot. Please irrigate immediately."
-        
-        try:
-            if sms_gateway:
-                # Sends message cleanly via Africa's Talking API link
-                sms_gateway.send(message=message_body, recipients=[farm['phone']])
-                return redirect(url_for('index', search_id=farm_id, sms_status="success"))
-        except Exception as e:
-            print(f"Failed to transmit SMS: {e}")
-            return redirect(url_for('index', search_id=farm_id, sms_status="error"))
-            
-    return redirect(url_for('index'))
-
-if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False)
+            popup=
