@@ -1,83 +1,127 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiptagich Irrigation Dashboard</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
-    <style>
-        body { background-color: #1a252f; color: #ecf0f1; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .sidebar { background-color: #2c3e50; min-height: 100vh; padding: 25px; box-shadow: 2px 0 5px rgba(0,0,0,0.2); }
-        .map-container { height: 100vh; width: 100%; position: relative; }
-        .card-custom { background-color: #34495e; border: none; color: #ecf0f1; margin-bottom: 25px; margin-top: 15px; }
-        .status-dot { height: 12px; width: 12px; display: inline-block; border-radius: 50%; margin-right: 8px; }
-        .btn-search { background-color: #2ecc71; color: white; border: none; }
-        .btn-search:hover { background-color: #27ae60; color: white; }
-        
-        /* Specific Color Rules */
-        .text-bold-black-sub { color: #000000 !important; font-weight: 700; }
-        .text-white-heading { color: #ffffff !important; font-weight: bold; font-size: 0.85rem; letter-spacing: 0.05rem; }
-        .text-white-label { color: #ffffff !important; }
-    </style>
-</head>
-<body>
+import os
+from flask import Flask, render_template, request
+import folium
 
-<div class="container-fluid p-0">
-    <div class="row g-0">
-        <div class="col-md-3 sidebar d-flex flex-column justify-content-between">
-            <div>
-                <h2 class="text-success fw-bold m-0">Kiptagich Ward</h2>
-                <p class="text-bold-black-sub small mb-4">GNSS-R Irrigation System</p>
-                
-                <form action="/" method="GET" class="mb-4">
-                    <label class="form-label small text-uppercase text-white-heading">Search Registry</label>
-                    <div class="input-group">
-                        <input type="text" name="search_id" class="form-control bg-dark text-white border-secondary" placeholder="Enter National ID..." value="{{ current_search }}">
-                        <button class="btn btn-search px-3 fw-bold" type="submit">Search</button>
-                    </div>
-                </form>
+app = Flask(__name__)
 
-                {% if error_msg %}
-                    <div class="alert alert-danger small py-2 my-2" role="alert">{{ error_msg }}</div>
-                {% endif %}
+# ==========================================
+# 1. CORE FARM DATABASE REGISTRY
+# ==========================================
+FARM_REGISTRY = {
+    "11405938": {
+        "owner": "David Kiprono",
+        "id": "11405938",
+        "status": "Critical",
+        "lat": -0.5467,
+        "lon": 35.5624
+    },
+    "22334455": {
+        "owner": "Grace Chepngetich",
+        "id": "22334455",
+        "status": "Satisfactory",
+        "lat": -0.5412,
+        "lon": 35.5691
+    },
+    "66778899": {
+        "owner": "John Koech",
+        "id": "66778899",
+        "status": "Monitor",
+        "lat": -0.5498,
+        "lon": 35.5550
+    }
+}
 
-                <div class="my-4">
-                    <label class="form-label small text-uppercase text-white-heading">Registry Match</label>
-                    {% if farm_data %}
-                        <div class="card card-custom p-3 shadow-sm" style="border-left: 4px solid {% if farm_data.status == 'Critical' %}#e74c3c{% elif farm_data.status == 'Monitor' %}#f39c12{% else %}#2ecc71{% endif %};">
-                            <div class="card-body p-0">
-                                <p class="mb-2 small text-white">Owner Name: <strong class="text-white">{{ farm_data.owner }}</strong></p>
-                                <p class="mb-2 small text-white">Owner's ID No: <span class="text-white">{{ farm_data.id }}</span></p>
-                                <p class="mb-0 small text-white">Status: 
-                                    <span class="fw-bold" style="color: {% if farm_data.status == 'Critical' %}#e74c3c{% elif farm_data.status == 'Monitor' %}#f39c12{% else %}#2ecc71{% endif %}; font-weight: 800;">
-                                        {{ farm_data.status }}
-                                    </span>
-                                </p>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="text-white-label small italic p-3 bg-dark bg-opacity-25 rounded text-center my-2">
-                            No target query currently selected.
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
+# ==========================================
+# 2. ROUTING & MAP GENERATION LOGIC
+# ==========================================
+@app.route("/", methods=["GET"])
+def index():
+    search_id = request.args.get("search_id", "").strip()
+    farm_data = FARM_REGISTRY.get(search_id)
+    error_msg = None
 
-            <div class="mt-4 pt-3 border-top border-secondary">
-                <label class="form-label small text-uppercase text-white-heading d-block mb-2">Irrigation Status</label>
-                <div class="d-flex align-items-center mb-1"><span class="status-dot" style="background-color: #2ecc71;"></span> <span class="small text-white-label">Satisfactory</span></div>
-                <div class="d-flex align-items-center mb-1"><span class="status-dot" style="background-color: #f39c12;"></span> <span class="small text-white-label">Monitor</span></div>
-                <div class="d-flex align-items-center mb-0"><span class="status-dot" style="background-color: #e74c3c;"></span> <span class="small text-white-label">Critical (Irrigate)</span></div>
-            </div>
-        </div>
+    # Determine map center focus based on active query
+    if search_id and farm_data:
+        map_center = [farm_data["lat"], farm_data["lon"]]
+        zoom_level = 16
+    else:
+        map_center = [-0.5450, 35.5650]
+        zoom_level = 13
 
-        <div class="col-md-9">
-            <div class="map-container">
-                {{ map_html|safe }}
-            </div>
-        </div>
-    </div>
-</div>
+    # Initialize your original map setup
+    m = folium.Map(
+        location=map_center, 
+        zoom_start=zoom_level, 
+        control_scale=True
+    )
 
-</body>
-</html>
+    # Add OpenStreetMap Base Layer
+    folium.TileLayer('openstreetmap').add_to(m)
+
+    # ------------------------------------------
+    # ORIGINAL MAP LAYER LOGIC (Google Tile Integration)
+    # ------------------------------------------
+    # This injects your satellite layer back into the map canvas
+    folium.TileLayer(
+        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        attr='Google Satellite',
+        name='Google Satellite',
+        overlay=True,
+        control=True
+    ).add_to(m)
+
+    # ------------------------------------------
+    # PLOT REGISTRY FARM MARKERS
+    # ------------------------------------------
+    for fid, f in FARM_REGISTRY.items():
+        if f["status"] == "Critical":
+            p_color = "red"
+        elif f["status"] == "Monitor":
+            p_color = "orange"
+        else:
+            p_color = "green"
+
+        folium.Marker(
+            location=[f["lat"], f["lon"]],
+            popup=f"Owner: {f['owner']}<br>ID: {f['id']}<br>Status: {f['status']}",
+            icon=folium.Icon(color=p_color, icon="info-sign")
+        ).add_to(m)
+
+    # ------------------------------------------
+    # HIGHLIGHT ACTIVE SEARCH SELECTION
+    # ------------------------------------------
+    if search_id:
+        if farm_data:
+            folium.Marker(
+                location=[farm_data["lat"], farm_data["lon"]],
+                popup=f"<b>TARGET MATCH</b><br>Owner: {farm_data['owner']}",
+                icon=folium.Icon(color="darkpurple", icon="star")
+            ).add_to(m)
+            
+            folium.CircleMarker(
+                location=[farm_data["lat"], farm_data["lon"]],
+                radius=25,
+                color="#9b59b6",
+                fill=True,
+                fill_color="#9b59b6",
+                fill_opacity=0.3
+            ).add_to(m)
+            
+            # Safe back-end logging statement that won't disrupt dependencies
+            if farm_data["status"] == "Critical":
+                print(f"--- SIMULATION LOG: Critical threshold alert triggered for {farm_data['owner']} ---")
+        else:
+            error_msg = f"National ID '{search_id}' not found in registry."
+
+    map_html = m._repr_html_()
+    return render_template(
+        "dashboard.html", 
+        map_html=map_html, 
+        farm_data=farm_data, 
+        error_msg=error_msg, 
+        current_search=search_id
+    )
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
