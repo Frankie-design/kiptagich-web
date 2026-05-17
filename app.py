@@ -1,20 +1,38 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 import folium
 from pykml import parser
 import os
+import africastalking
 
 app = Flask(__name__)
 
+# ==========================================
+# LIVE AFRICA'S TALKING CREDENTIALS
+# ==========================================
+AT_USERNAME = "sandbox"
+AT_API_KEY = "atsk_f2466c6356562f03cd3bb0db88084508d08c1cecfe1b2afa079b69287c38a8c76f4c8c57" 
+
+try:
+    africastalking.initialize(AT_USERNAME, AT_API_KEY)
+    sms_gateway = africastalking.SMS
+except Exception as e:
+    print(f"SMS Gateway initialization log: {e}")
+    sms_gateway = None
+
+# ==========================================
+# SYSTEM DATABASE REGISTRY (WITH REAL NUMBERS)
+# ==========================================
 FARM_DATABASE = {
-    "29485731": {"owner": "John Chepkwony", "lat": -0.528, "lon": 35.585, "status": "Satisfactory"},
-    "32019485": {"owner": "Mary Cherotich", "lat": -0.546811, "lon": 35.659836, "status": "Monitor"},
-    "11405938": {"owner": "David Kiprono", "lat": -0.522, "lon": 35.579, "status": "Critical"},
-    "27495811": {"owner": "Grace Kipkemoi", "lat": -0.535, "lon": 35.588, "status": "Satisfactory"}
+    "29485731": {"owner": "John Chepkwony", "phone": "+254768911014", "lat": -0.528, "lon": 35.585, "status": "Satisfactory"},
+    "32019485": {"owner": "Mary Cherotich", "phone": "+254702970192", "lat": -0.546811, "lon": 35.659836, "status": "Monitor"},
+    "11405938": {"owner": "David Kiprono", "phone": "+254798992348", "lat": -0.522, "lon": 35.579, "status": "Critical"},
+    "27495811": {"owner": "Grace Kipkemoi", "phone": "+254115690209", "lat": -0.535, "lon": 35.588, "status": "Satisfactory"}
 }
 
 @app.route('/')
 def index():
     search_id = request.args.get('search_id', '').strip()
+    sms_status = request.args.get('sms_status', '')
     error_msg = None
     farm_sidebar_data = None
     
@@ -31,6 +49,7 @@ def index():
             farm_sidebar_data = {
                 "id": search_id,
                 "owner": farm_info["owner"],
+                "phone": farm_info["phone"],
                 "status": farm_info["status"]
             }
         else:
@@ -70,7 +89,7 @@ def index():
                 popup="Kiptagich Ward Boundary"
             ).add_to(m)
     except Exception as e:
-        print(f"Error loading KML boundary layout: {e}")
+        print(f"Error loading KML: {e}")
 
     if farm_info:
         color_map = {"Satisfactory": "green", "Monitor": "orange", "Critical": "red"}
@@ -83,7 +102,6 @@ def index():
             <b>Status:</b> <span style='color:{marker_color};font-weight:bold;'>{farm_info['status']}</span>
         </div>
         """
-        
         folium.Marker(
             location=[farm_info["lat"], farm_info["lon"]],
             popup=folium.Popup(popup_content, max_width=250),
@@ -98,8 +116,27 @@ def index():
         map_html=map_html, 
         error_msg=error_msg, 
         current_search=search_id,
-        farm_data=farm_sidebar_data
+        farm_data=farm_sidebar_data,
+        sms_status=sms_status
     )
+
+@app.route('/send_alert', methods=['POST'])
+def send_alert():
+    farm_id = request.form.get('farm_id')
+    if farm_id in FARM_DATABASE:
+        farm = FARM_DATABASE[farm_id]
+        message_body = f"Kiptagich System Alert: Hello {farm['owner']}, GNSS-R data shows soil moisture drops below threshold on your plot. Please irrigate immediately."
+        
+        try:
+            if sms_gateway:
+                # Sends message cleanly via Africa's Talking API link
+                sms_gateway.send(message=message_body, recipients=[farm['phone']])
+                return redirect(url_for('index', search_id=farm_id, sms_status="success"))
+        except Exception as e:
+            print(f"Failed to transmit SMS: {e}")
+            return redirect(url_for('index', search_id=farm_id, sms_status="error"))
+            
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
