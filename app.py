@@ -1,41 +1,17 @@
 import os
 from flask import Flask, render_template, request
 import folium
-import africastalking
 
 app = Flask(__name__)
 
 # ==========================================
-# 1. LIVE AFRICA'S TALKING INITIALIZATION
-# ==========================================
-# Leave these as placeholders! We wrapped this in a try/except block 
-# so the map works perfectly even before you add your real keys.
-AT_USERNAME = "your_live_username"
-AT_API_KEY = "your_live_api_key"
-
-live_sms_ready = False
-sms = None
-
-if AT_USERNAME != "your_live_username" and AT_API_KEY != "your_live_api_key":
-    try:
-        africastalking.initialize(AT_USERNAME, AT_API_KEY)
-        sms = africastalking.SMS
-        print("--- BACKGROUND LOG: Africa's Talking Production Gateway Initialized ---")
-        live_sms_ready = True
-    except Exception as e:
-        print(f"--- BACKGROUND LOG: Gateway setup failed: {e}. Running in offline mode. ---")
-else:
-    print("--- BACKGROUND LOG: running with dummy keys. Live SMS disabled, UI working. ---")
-
-# ==========================================
-# 2. SEED DATABASE / REGISTRY
+# 1. DATABASE REGISTRY (KIPTAGICH WARD COORDINATES)
 # ==========================================
 FARM_REGISTRY = {
     "11405938": {
         "owner": "David Kiprono",
         "id": "11405938",
         "status": "Critical",
-        "phone": "+254712345678", 
         "lat": -0.5467,
         "lon": 35.5624
     },
@@ -43,7 +19,6 @@ FARM_REGISTRY = {
         "owner": "Grace Chepngetich",
         "id": "22334455",
         "status": "Satisfactory",
-        "phone": "+254700000000",
         "lat": -0.5412,
         "lon": 35.5691
     },
@@ -51,36 +26,13 @@ FARM_REGISTRY = {
         "owner": "John Koech",
         "id": "66778899",
         "status": "Monitor",
-        "phone": "+254711111111",
         "lat": -0.5498,
         "lon": 35.5550
     }
 }
 
 # ==========================================
-# 3. BACKGROUND SMS ROUTINE
-# ==========================================
-def trigger_background_alert(farm):
-    """Quietly handles the cellular message dispatch without cluttering the UI."""
-    if not live_sms_ready:
-        print(f"--- BACKGROUND LOG: [OFFLINE SIMULATION] Critical SMS triggered for {farm['owner']} ({farm['phone']}) ---")
-        return True
-        
-    message = (
-        f"Alert for {farm['owner']} (Plot ID: {farm['id']}): Your plot has reached a "
-        f"CRITICAL moisture threshold based on GNSS-R analysis. Please initiate irrigation."
-    )
-    
-    try:
-        response = sms.send(message, [farm["phone"]])
-        print(f"--- BACKGROUND LOG: Live SMS successfully dispatched to {farm['owner']} ({farm['phone']}) ---")
-        return True
-    except Exception as e:
-        print(f"--- BACKGROUND LOG: Silent cellular dispatch failed for {farm['owner']}. Error: {e} ---")
-        return False
-
-# ==========================================
-# 4. CORE APP ROUTING & MAP GENERATION
+# 2. CORE APP ROUTING & MAP GENERATION
 # ==========================================
 @app.route("/", methods=["GET"])
 def index():
@@ -88,14 +40,35 @@ def index():
     farm_data = FARM_REGISTRY.get(search_id)
     error_msg = None
 
-    # Base interactive map centered right on Kiptagich Ward area
+    # Base interactive map precisely centered on Kiptagich Ward
     m = folium.Map(
         location=[-0.5450, 35.5650], 
         zoom_start=14, 
         control_scale=True
     )
 
-    # Automatically map out all available registry entries as foundational pins
+    # Re-draw the boundary line polygon for Kiptagich Ward
+    ward_boundary_coords = [
+        [-0.5350, 35.5500],
+        [-0.5320, 35.5700],
+        [-0.5400, 35.5850],
+        [-0.5550, 35.5800],
+        [-0.5600, 35.5600],
+        [-0.5500, 35.5450],
+        [-0.5350, 35.5500]  # Closes the polygon loop
+    ]
+    
+    folium.Polygon(
+        locations=ward_boundary_coords,
+        color="purple",
+        weight=3,
+        fill=True,
+        fill_color="purple",
+        fill_opacity=0.1,
+        popup="Kiptagich Ward Boundary"
+    ).add_to(m)
+
+    # Plot out the foundational pins
     for fid, f in FARM_REGISTRY.items():
         if f["status"] == "Critical":
             p_color = "red"
@@ -110,15 +83,27 @@ def index():
             icon=folium.Icon(color=p_color, icon="info-sign")
         ).add_to(m)
 
-    # Process explicit user searches
+    # Process user search query
     if search_id:
         if farm_data:
+            # Re-center viewport on the specific searched farm plot
             m = folium.Map(
                 location=[farm_data["lat"], farm_data["lon"]], 
                 zoom_start=16, 
                 control_scale=True
             )
             
+            # Re-add boundary to the new map instance so it doesn't vanish on search
+            folium.Polygon(
+                locations=ward_boundary_coords,
+                color="purple",
+                weight=3,
+                fill=True,
+                fill_color="purple",
+                fill_opacity=0.1
+            ).add_to(m)
+            
+            # Highlight target plot
             folium.Marker(
                 location=[farm_data["lat"], farm_data["lon"]],
                 popup=f"<b>TARGET MATCH</b><br>Owner: {farm_data['owner']}",
@@ -135,7 +120,7 @@ def index():
             ).add_to(m)
 
             if farm_data["status"] == "Critical":
-                trigger_background_alert(farm_data)
+                print(f"--- SIMULATION LOG: Critical status detected for {farm_data['owner']}. SMS simulated successfully. ---")
         else:
             error_msg = f"National ID '{search_id}' not found in registry."
 
