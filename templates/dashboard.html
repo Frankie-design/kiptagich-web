@@ -4,136 +4,88 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kiptagich Irrigation Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            height: 100vh;
-            background-color: #1a252f;
-        }
-        #sidebar {
-            width: 300px;
-            background-color: #2c3e50;
-            color: #ecf0f1;
-            padding: 20px;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.3);
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-        }
-        #map-container {
-            flex-grow: 1;
-            height: 100%;
-        }
-        h2 { color: #2ecc71; margin-top: 0; }
-        .section-title {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8c8d;
-            margin: 20px 0 10px 0;
-            border-bottom: 1px solid #34495e;
-            padding-bottom: 5px;
-        }
-        .status-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        .dot {
-            height: 12px;
-            width: 12px;
-            border-radius: 50%;
-            margin-right: 10px;
-            display: inline-block;
-        }
-        .green { background-color: #2ecc71; }
-        .yellow { background-color: #f1c40f; }
-        .red { background-color: #e74c3c; }
-        
-        .search-container {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 20px;
-        }
-        #farmSearch {
-            flex-grow: 1;
-            padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #34495e;
-            background: #1a252f;
-            color: white;
-            font-size: 13px;
-        }
-        #searchBtn {
-            padding: 10px 15px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        #searchBtn:hover { background: #219653; }
-        
-        .result-card {
-            background-color: #34495e;
-            padding: 12px;
-            border-radius: 6px;
-            border-left: 4px solid #2ecc71;
-            margin-bottom: 15px;
-            font-size: 13px;
-        }
-        .result-line {
-            margin: 5px 0;
-        }
-        .result-label {
-            color: #bdc3c7;
-            font-weight: bold;
-        }
+        body { background-color: #1a252f; color: #ecf0f1; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .sidebar { background-color: #2c3e50; min-height: 100vh; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.2); }
+        .map-container { height: 100vh; width: 100%; position: relative; }
+        .card-custom { background-color: #34495e; border: none; color: #ecf0f1; margin-bottom: 15px; }
+        .status-dot { height: 12px; width: 12px; display: inline-block; border-radius: 50%; margin-right: 8px; }
+        .btn-search { background-color: #2ecc71; color: white; border: none; }
+        .btn-search:hover { background-color: #27ae60; color: white; }
     </style>
 </head>
 <body>
 
-    <div id="sidebar">
-        <h2>Kiptagich Ward</h2>
-        <p style="font-size: 12px; color: #bdf2d5; margin-top: -10px;">GNSS-R Irrigation System</p>
-        
-        <div class="section-title">Search Registry</div>
-        <form action="/" method="GET" class="search-container">
-            <input type="text" name="search_id" id="farmSearch" placeholder="Enter National ID (e.g. 32019485)" value="{{ current_search if current_search }}">
-            <button type="submit" id="searchBtn">Search</button>
-        </form>
-        
-        {% if error_msg %}
-        <p style="color: #e74c3c; font-size: 12px; margin-top: -10px; font-weight: bold; margin-bottom: 15px;">⚠️ {{ error_msg }}</p>
-        {% endif %}
+<div class="container-fluid p-0">
+    <div class="row g-0">
+        <div class="col-md-3 sidebar d-flex flex-column justify-content-between">
+            <div>
+                <h2 class="text-success fw-bold m-0">Kiptagich Ward</h2>
+                <p class="text-muted small mb-4">GNSS-R Irrigation System</p>
+                
+                <form action="/" method="GET" class="mb-4">
+                    <label class="form-label small text-uppercase tracking-wider text-muted fw-bold">Search Registry</label>
+                    <div class="input-group">
+                        <input type="text" name="search_id" class="form-control bg-dark text-white border-secondary" placeholder="Enter National ID..." value="{{ current_search }}">
+                        <button class="btn btn-search px-3 fw-bold" type="submit">Search</button>
+                    </div>
+                </form>
 
-        {% if farm_data %}
-        <div class="section-title">Registry Match</div>
-        <div class="result-card" style="border-left-color: {% if farm_data.status == 'Satisfactory' %}#2ecc71{% elif farm_data.status == 'Monitor' %}#f1c40f{% else %}#e74c3c{% endif %};">
-            <div class="result-line"><span class="result-label">Owner Name:</span> {{ farm_data.owner }}</div>
-            <div class="result-line"><span class="result-label">Owner's ID No:</span> {{ farm_data.id }}</div>
-            <div class="result-line"><span class="result-label">Status:</span> 
-                <span style="font-weight: bold; color: {% if farm_data.status == 'Satisfactory' %}#2ecc71{% elif farm_data.status == 'Monitor' %}#f1c40f{% else %}#e74c3c{% endif %};">
-                    {{ farm_data.status }}
-                </span>
+                {% if error_msg %}
+                    <div class="alert alert-danger small py-2" role="alert">{{ error_msg }}</div>
+                {% endif %}
+                
+                {% if sms_status == 'success' %}
+                    <div class="alert alert-success small py-2" role="alert">📲 Notification dispatched to Sandbox!</div>
+                {% elif sms_status == 'error' %}
+                    <div class="alert alert-warning small py-2" role="alert">⚠️ Gateway transmission failed.</div>
+                {% endif %}
+
+                <label class="form-label small text-uppercase tracking-wider text-muted fw-bold">Registry Match</label>
+                {% if farm_data %}
+                    <div class="card card-custom p-3 shadow-sm" style="border-left: 4px solid {% if farm_data.status == 'Critical' %}#e74c3c{% elif farm_data.status == 'Monitor' %}#f39c12{% else %}#2ecc71{% endif %};">
+                        <div class="card-body p-0">
+                            <p class="mb-1 small text-muted">Owner Name: <strong class="text-white">{{ farm_data.owner }}</strong></p>
+                            <p class="mb-1 small text-muted">Owner's ID No: <span class="text-white">{{ farm_data.id }}</span></p>
+                            <p class="mb-0 small text-muted">Status: 
+                                <span class="fw-bold" style="color: {% if farm_data.status == 'Critical' %}#e74c3c{% elif farm_data.status == 'Monitor' %}#f39c12{% else %}#2ecc71{% endif %};">
+                                    {{ farm_data.status }}
+                                </span>
+                            </p>
+                            
+                            {% if farm_data.status == 'Critical' %}
+                                <form action="/send_alert" method="POST" class="mt-3 pt-3 border-top border-secondary">
+                                    <input type="hidden" name="farm_id" value="{{ farm_data.id }}">
+                                    <button type="submit" class="btn btn-warning btn-sm w-100 fw-bold shadow-sm py-2">
+                                        📲 Broadcast Irrigation SMS
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-muted small italic p-3 bg-dark bg-opacity-25 rounded text-center">
+                        No target query currently selected.
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="mt-4 pt-3 border-top border-secondary">
+                <label class="form-label small text-uppercase tracking-wider text-muted fw-bold d-block mb-2">Irrigation Status</label>
+                <div class="d-flex align-items-center mb-1"><span class="status-dot" style="background-color: #2ecc71;"></span> <span class="small text-muted">Satisfactory</span></div>
+                <div class="d-flex align-items-center mb-1"><span class="status-dot" style="background-color: #f39c12;"></span> <span class="small text-muted">Monitor</span></div>
+                <div class="d-flex align-items-center mb-0"><span class="status-dot" style="background-color: #e74c3c;"></span> <span class="small text-muted">Critical (Irrigate)</span></div>
             </div>
         </div>
-        {% endif %}
 
-        <div class="section-title">Irrigation Status</div>
-        <div class="status-item"><span class="dot green"></span> Satisfactory</div>
-        <div class="status-item"><span class="dot yellow"></span> Monitor</div>
-        <div class="status-item"><span class="dot red"></span> Critical (Irrigate)</div>
+        <div class="col-md-9">
+            <div class="map-container">
+                {{ map_html|safe }}
+            </div>
+        </div>
     </div>
-
-    <div id="map-container">
-        {{ map_html | safe }}
-    </div>
+</div>
 
 </body>
 </html>
