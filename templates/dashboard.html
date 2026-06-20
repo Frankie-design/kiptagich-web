@@ -3,80 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiptagich Web GIS Dashboard</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    <title>Kiptagich Agri-GIS Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <style>
-        body { background-color: #f8f9fa; font-family: sans-serif; }
-        .sidebar { height: 100vh; overflow-y: auto; padding: 20px; background: white; box-shadow: 2px 0 5px rgba(0,0,0,0.05); }
-        .map-container { height: 100vh; width: 100%; }
+        /* Force the entire web app to lock to the view height with no scrollbars */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background-color: #f8f9fa;
+        }
+
+        /* 100% full screen layout grid with no margins */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Shrunk Sidebar panel occupying exactly 25% width */
+        .sidebar-panel {
+            width: 25%;
+            min-width: 320px;
+            height: 100vh;
+            background: #ffffff;
+            border-right: 1px solid #dee2e6;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-y: auto;
+        }
+
+        /* Expanded Map section capturing a massive 75% chunk */
+        .map-panel {
+            flex-grow: 1;
+            height: 100vh;
+            position: relative;
+            background: #e9ecef;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Enforce internal map element to consume every pixel of its container */
+        .map-panel > div {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .registry-title {
+            color: #198754;
+            font-weight: 700;
+        }
+
+        .counter-card {
+            background-color: #212529;
+            color: #ffffff;
+            border-radius: 6px;
+            padding: 15px;
+        }
     </style>
 </head>
 <body>
 
-<div class="container-fluid m-0 p-0">
-    <div class="row g-0">
-        <div class="col-md-4 sidebar">
-            <h3 class="fw-bold text-success mb-1">Kiptagich Agri-GIS</h3>
-            <p class="text-muted small mb-4">Adaptive Crowdsourcing & Satellite Monitoring Engine</p>
-            
-            {% if success_msg %}
-            <div class="alert alert-success small py-2">{{ success_msg }}</div>
-            {% endif %}
+    <div class="app-container">
+        
+        <div class="sidebar-panel">
+            <div>
+                <h3 class="registry-title mb-1">Kiptagich Agri-GIS</h3>
+                <p class="text-muted small mb-4">Adaptive Crowdsourcing Engine</p>
+                
+                {% if success_msg %}
+                <div class="alert alert-success py-2 small" role="alert">
+                    {{ success_msg }}
+                </div>
+                {% endif %}
 
-            <div class="card border-0 bg-light p-3 mb-4">
-                <h6 class="fw-bold mb-2">➕ Register New Farm Boundary</h6>
-                <form action="/add_farm" method="POST">
-                    <div class="mb-2">
-                        <label class="small fw-semibold text-secondary">Farmer Name</label>
-                        <input type="text" name="farmer_name" class="form-control form-control-sm" placeholder="e.g. John Doe" required>
-                    </div>
-                    <div class="mb-2">
-                        <label class="small fw-semibold text-secondary">Phone Number</label>
-                        <input type="text" name="phone_number" class="form-control form-control-sm" placeholder="e.g. +2547..." required>
-                    </div>
-                    <div class="mb-2">
-                        <label class="small fw-semibold text-secondary">Crop Type</label>
-                        <select name="crop_type" class="form-select form-select-sm" required>
-                            <option value="" disabled selected>Select Crop Type</option>
-                            <option value="Tea">Tea</option>
-                            <option value="Maize">Maize</option>
-                            <option value="Potatoes">Potatoes</option>
-                            <option value="Cabbage">Cabbage</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="small fw-semibold text-secondary">Geom Polygon (WKT format)</label>
-                        <textarea name="geom_polygon" class="form-control form-control-sm" rows="3" placeholder="POLYGON((35.5 -0.5, ...))" required></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-success btn-sm w-100 fw-bold">Inject Spatial Plot</button>
-                </form>
-            </div>
-
-            <div class="card border-0 bg-dark text-white p-3 mb-3">
-                <div class="row text-center">
-                    <div class="col-6">
-                        <small class="text-muted d-block">Active Plots</small>
-                        <span class="fs-4 fw-bold text-success">{{ total_farms }}</span>
-                    </div>
-                    <div class="col-6">
-                        <small class="text-muted d-block">System Status</small>
-                        <span class="fs-5 fw-bold text-info">Live Sync</span>
-                    </div>
+                <div class="card card-body bg-light border-0 p-3 mb-3">
+                    <h6 class="fw-bold mb-3" style="color: #4b3f72;">➕ Register New Farm Boundary</h6>
+                    <form action="/add_farm" method="POST">
+                        <div class="mb-2">
+                            <label class="form-label small mb-1 fw-semibold">Farmer Name</label>
+                            <input type="text" name="farmer_name" class="form-control form-control-sm" placeholder="e.g. John Doe" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1 fw-semibold">Phone Number</label>
+                            <input type="text" name="phone_number" class="form-control form-control-sm" placeholder="e.g. +2547..." required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1 fw-semibold">Crop Type</label>
+                            <select name="crop_type" class="form-select form-select-sm" required>
+                                <option value="" disabled selected>Select Crop Type</option>
+                                <option value="Tea">Tea</option>
+                                <option value="Maize">Maize</option>
+                                <option value="Coffee">Coffee</option>
+                                <option value="Peas">Peas</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small mb-1 fw-semibold">Geom Polygon (WKT format)</label>
+                            <textarea name="geom_polygon" class="form-control form-control-sm style-code" rows="3" placeholder="POLYGON((35.5 -0.5, ...))" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm w-100 fw-bold py-2">Inject Spatial Plot</button>
+                    </form>
                 </div>
             </div>
-            
-            <div class="text-center mt-5">
-                <small class="text-muted style='font-size: 11px;'">Kiptagich Ward Geospatial Automated Irrigation Network</small>
+
+            <div class="mt-auto">
+                <div class="counter-card d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="small text-muted text-uppercase fw-bold" style="font-size: 0.75rem;">Total Registry</div>
+                        <h2 class="mb-0 fw-bold text-success">{{ total_farms }}</h2>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-secondary animate-pulse px-2 py-1">Live Sync</span>
+                    </div>
+                </div>
+                <div class="text-center text-muted" style="font-size: 0.75rem;">
+                    Kiptagich Ward Geospatial Network
+                </div>
             </div>
         </div>
 
-        <div class="col-md-8">
-            <div class="map-container">
-                {{ map_html|safe }}
-            </div>
+        <div class="map-panel" id="map-container">
+            {{ map_html|safe }}
         </div>
+
     </div>
-</div>
 
 </body>
 </html>
