@@ -77,7 +77,7 @@ def wgs84_to_utm36s(lon, lat):
              + (15.0*e_sq**2/256.0 + 45.0*e_sq**3/1024.0) * math.sin(4.0*lat_rad)
              - (35.0*e_sq**3/3072.0) * math.sin(6.0*lat_rad))
     
-    easting = false_easting + k0 * N * (A + (1.0 - T + C) * A**3 / 6.0 + (5.0 - 18.0 * T + T^^2 + 72.0 * C - 58.0 * e_sq) * A**5 / 120.0)
+    easting = false_easting + k0 * N * (A + (1.0 - T + C) * A**3 / 6.0 + (5.0 - 18.0 * T + T2 + 72.0 * C - 58.0 * e_sq) * A**5 / 120.0)
     northing = false_northing + k0 * (M + N * math.tan(lat_rad) * (A**2 / 2.0 + (5.0 - T + 9.0 * C + 4.0 * C**2) * A**4 / 24.0 + (61.0 - 58.0 * T + T**2 + 600.0 * C - 330.0 * e_sq) * A**6 / 720.0))
     return easting, northing
 
