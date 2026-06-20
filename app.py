@@ -13,7 +13,7 @@ FARM_REGISTRY = {}
 IS_INITIALIZED = False
 LATEST_METRICS = {"soil_moisture": 23.8, "et0": 3.2, "ndvi": 0.55, "rainfall": 0.0}
 
-# Africa's Talking Configuration (Populated via Environment Variables or placeholders)
+# Africa's Talking Credentials
 AT_USERNAME = os.environ.get("AT_USERNAME", "sandbox")
 AT_API_KEY = os.environ.get("AT_API_KEY", "your_africas_talking_api_key_here")
 
@@ -62,7 +62,7 @@ def fetch_and_analyze_daily_data():
             LATEST_METRICS = {"soil_moisture": soil_moisture, "et0": et0, "ndvi": ndvi, "rainfall": rainfall}
             print(f"Telemetry Refreshed Successfully: SM={soil_moisture:.1f}%")
             
-            # Automated 6PM Dispatch Rule: Trigger alerts if soil moisture drops below threshold
+            # Automated 6PM Dispatch Rule
             if soil_moisture < 26.0:
                 print("Moisture below critical safety baseline. Commencing background SMS batch sequence...")
                 for fid, farm in FARM_REGISTRY.items():
@@ -169,19 +169,15 @@ def index():
 
     folium.LayerControl().add_to(m)
     
-    # Injecting CSS adjustments dynamically into the Folium map frame to fix layout ratios
-    custom_style = """
-    <style>
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-        .folium-map { width: 100% !important; height: 100vh !important; }
-        #sidebar-panel { width: 28% !important; }
-        #map-panel { width: 72% !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; }
-        .row { margin: 0 !important; padding: 0 !important; height: 100vh !important; }
-    </style>
-    """
-    m.get_root().header.add_child(folium.Element(custom_style))
+    # Structural layout fix: Modifying html delivery directly to eliminate white gaps and set the 28/72 split ratio
+    raw_map_html = m._repr_html_()
+    fixed_map_html = raw_map_html.replace(
+        '<div ', 
+        '<div style="width:100%; height:100vh; margin:0; padding:0; overflow:hidden;" ', 
+        1
+    )
     
-    return render_template("dashboard.html", map_html=m._repr_html_(), total_farms=len(FARM_REGISTRY), success_msg=success_msg)
+    return render_template("dashboard.html", map_html=fixed_map_html, total_farms=len(FARM_REGISTRY), success_msg=success_msg)
 
 @app.route("/add_farm", methods=["POST"])
 def add_farm():
