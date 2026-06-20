@@ -13,6 +13,39 @@ FARM_REGISTRY = {}
 IS_INITIALIZED = False
 LATEST_METRICS = {"soil_moisture": 23.8, "et0": 3.2, "ndvi": 0.55, "rainfall": 0.0}
 
+# Africa's Talking Configuration (Populated via Environment Variables or placeholders)
+AT_USERNAME = os.environ.get("AT_USERNAME", "sandbox")
+AT_API_KEY = os.environ.get("AT_API_KEY", "your_africas_talking_api_key_here")
+
+def send_africastalking_sms(to_phone, farmer_name, moisture):
+    """Dispatches real-time agrometeorological alerts via Africa's Talking Gateway."""
+    if not to_phone or to_phone == "N/A":
+        return
+    
+    url = "https://api.africastalking.com/version1/messaging"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "apiKey": AT_API_KEY
+    }
+    
+    message = (
+        f"Habari {farmer_name}, Kiptagich Agri-GIS has detected low soil moisture "
+        f"({moisture:.1f}%) on your plot. Please initiate irrigation immediately."
+    )
+    
+    data = {
+        "username": AT_USERNAME,
+        "to": to_phone,
+        "message": message
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, data=data, timeout=10)
+        print(f"SMS Status for {farmer_name} ({to_phone}): {response.status_code} -> {response.text}")
+    except Exception as e:
+        print(f"Failed to dispatch SMS to {farmer_name}: {e}")
+
 def fetch_and_analyze_daily_data():
     global LATEST_METRICS
     print("Executing automated agrometeorological background analysis...")
@@ -28,6 +61,12 @@ def fetch_and_analyze_daily_data():
             ndvi = min(0.85, max(0.15, 0.42 + (soil_moisture / 180.0)))
             LATEST_METRICS = {"soil_moisture": soil_moisture, "et0": et0, "ndvi": ndvi, "rainfall": rainfall}
             print(f"Telemetry Refreshed Successfully: SM={soil_moisture:.1f}%")
+            
+            # Automated 6PM Dispatch Rule: Trigger alerts if soil moisture drops below threshold
+            if soil_moisture < 26.0:
+                print("Moisture below critical safety baseline. Commencing background SMS batch sequence...")
+                for fid, farm in FARM_REGISTRY.items():
+                    send_africastalking_sms(farm["phone"], farm["owner"], soil_moisture)
     except Exception as e:
         print(f"Background Sync Error: {e}")
 
@@ -112,7 +151,6 @@ def index():
         status = "Satisfactory"
         marker_color = "green"
 
-    # Centered dynamically over the core cluster coordinates (-0.5510, 35.5780)
     m = folium.Map(location=[-0.5510, 35.5780], zoom_start=13, tiles=None, control_scale=True)
     folium.TileLayer("OpenStreetMap", name="Vector Map").add_to(m)
     folium.TileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", attr="Google", name="Satellite Backdrop").add_to(m)
@@ -123,7 +161,6 @@ def index():
 
     for fid, f in FARM_REGISTRY.items():
         if f["boundary"]:
-            # If it's a dynamic user injection, draw with bright cyan. Otherwise use the status color.
             outline_color = "cyan" if f.get("is_new") else ("red" if marker_color == "red" else "darkblue")
             folium.Polygon(locations=f["boundary"], color=outline_color, weight=3, fill=True, fill_opacity=0.25).add_to(m)
             
@@ -131,6 +168,19 @@ def index():
         folium.Marker(location=[f["lat"], f["lon"]], popup=folium.Popup(popup_html, max_width=280), icon=folium.Icon(color=marker_color, icon="leaf")).add_to(m)
 
     folium.LayerControl().add_to(m)
+    
+    # Injecting CSS adjustments dynamically into the Folium map frame to fix layout ratios
+    custom_style = """
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        .folium-map { width: 100% !important; height: 100vh !important; }
+        #sidebar-panel { width: 28% !important; }
+        #map-panel { width: 72% !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; }
+        .row { margin: 0 !important; padding: 0 !important; height: 100vh !important; }
+    </style>
+    """
+    m.get_root().header.add_child(folium.Element(custom_style))
+    
     return render_template("dashboard.html", map_html=m._repr_html_(), total_farms=len(FARM_REGISTRY), success_msg=success_msg)
 
 @app.route("/add_farm", methods=["POST"])
