@@ -1,15 +1,52 @@
 import os
 import re
 import csv
+import math
 from flask import Flask, render_template, request
 import folium
 from shapely.wkt import loads as load_wkt
-from pyproj import Transformer
 
 app = Flask(__name__)
 
-# Geodetic (WGS84 EPSG:4326) to Projected UTM Zone 36S (EPSG:32736) for Kenya
-utm_transformer = Transformer.from_crs("epsg:4326", "epsg:32736", always_xy=True)
+# ==========================================
+# PURE MATH GEODETIC TO UTM ZONE 36S ENGINE
+# ==========================================
+def wgs84_to_utm36s(lon, lat):
+    """
+    Mathematical transformation formula to convert Geodetic Lat/Lon 
+    directly to UTM Zone 36S (meters) without requiring external pyproj binaries.
+    """
+    # Zone 36S central meridian is 33 degrees East
+    lon_origin = 33.0
+    deg_to_rad = math.pi / 180.0
+    
+    lat_rad = lat * deg_to_rad
+    lon_rad = (lon - lon_origin) * deg_to_rad
+    
+    # WGS84 Ellipsoid constants
+    a = 6378137.0
+    f = 1.0 / 298.257223563
+    b = a * (1.0 - f)
+    e_sq = (a**2 - b**2) / (a**2)
+    
+    k0 = 0.9996
+    false_easting = 500000.0
+    false_northing = 10000000.0 # Southern Hemisphere
+    
+    N = a / math.sqrt(1.0 - e_sq * math.sin(lat_rad)**2)
+    T = math.tan(lat_rad)**2
+    C = e_sq * math.cos(lat_rad)**2 / (1.0 - e_sq)
+    A = lon_rad * math.cos(lat_rad)
+    
+    M = a * ((1.0 - e_sq/4.0 - 3.0*e_sq**2/64.0 - 5.0*e_sq**3/256.0) * lat_rad
+             - (3.0*e_sq/8.0 + 3.0*e_sq**2/32.0 + 45.0*e_sq**3/1024.0) * math.sin(2.0*lat_rad)
+             + (15.0*e_sq**2/256.0 + 45.0*e_sq**3/1024.0) * math.sin(4.0*lat_rad)
+             - (35.0*e_sq**3/3072.0) * math.sin(6.0*lat_rad))
+    
+    easting = false_easting + k0 * N * (A + (1.0 - T + C) * A**3 / 6.0 + (5.0 - 18.0 * T + T**2 + 72.0 * C - 58.0 * e_sq) * A**5 / 120.0)
+    northing = false_northing + k0 * (M + N * math.tan(lat_rad) * (A**2 / 2.0 + (5.0 - T + 9.0 * C + 4.0 * C**2) * A**4 / 24.0 + (61.0 - 58.0 * T + T**2 + 600.0 * C - 330.0 * e_sq) * A**6 / 720.0))
+    
+    return easting, northing
 
 # ==========================================
 # 1. LIVE DATA SOURCE LOADER (CSV)
@@ -26,7 +63,7 @@ def load_farmers_database():
         with open(csv_file, mode='r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # UPDATED: Matches your exact column header 'id number' with a space
+                # Matches your manual space column header exactly
                 national_id = row.get("id number", "").strip()
                 wkt_polygon = row.get("geom_polygon", "").strip()
                 
@@ -34,18 +71,15 @@ def load_farmers_database():
                     continue
                 
                 try:
-                    # Strip Z dimension identifier if present for standard WKT reading
                     clean_wkt = wkt_polygon.replace("POLYGON Z", "POLYGON")
                     shapely_poly = load_wkt(clean_wkt)
                     
-                    # 1. Calculate Centroid Point
                     centroid = shapely_poly.centroid
                     lon_deg, lat_deg = centroid.x, centroid.y
                     
-                    # 2. Coordinate Transformation to UTM Zone 36S (Meters)
-                    easting, northing = utm_transformer.transform(lon_deg, lat_deg)
+                    # Compute UTM via pure mathematical formula
+                    easting, northing = wgs84_to_utm36s(lon_deg, lat_deg)
                     
-                    # 3. Flip coords (lon, lat) -> (lat, lon) for Folium drawing
                     folium_coords = [[pt[1], pt[0]] for pt in shapely_poly.exterior.coords]
                     
                     database[national_id] = {
@@ -58,7 +92,7 @@ def load_farmers_database():
                         "utm_x": easting,
                         "utm_y": northing,
                         "boundary": folium_coords,
-                        "status": "Satisfactory"  # Gateway baseline status placeholder
+                        "status": "Satisfactory"
                     }
                 except Exception as geom_err:
                     print(f"Skipping geometry parse error on row: {geom_err}")
@@ -136,7 +170,6 @@ def index():
             popup="Kiptagich Ward Reference Boundary"
         ).add_to(m)
 
-    # Draw individual plot footprints and add markers
     for fid, f in FARM_REGISTRY.items():
         if f["boundary"]:
             folium.Polygon(
@@ -165,16 +198,4 @@ def index():
         else:
             error_msg = f"ID '{search_id}' not found in database."
 
-    folium.LayerControl(position="topright").add_to(m)
-    map_html = m._repr_html_()
-    return render_template(
-        "dashboard.html", 
-        map_html=map_html, 
-        farm_data=farm_data, 
-        error_msg=error_msg, 
-        current_search=search_id
-    )
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    folium.LayerControl(position
