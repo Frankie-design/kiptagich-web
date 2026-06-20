@@ -82,7 +82,7 @@ def initialize_database():
                     if lon and lat:
                         ex, ny = wgs84_to_utm36s(lon, lat)
                         unique_id = f"FARM_{idx:03d}"
-                        FARM_REGISTRY[unique_id] = {"id": unique_id, "owner": name, "phone": phone, "crop": crop, "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "boundary": geom}
+                        FARM_REGISTRY[unique_id] = {"id": unique_id, "owner": name, "phone": phone, "crop": crop, "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "boundary": geom, "is_new": False}
         IS_INITIALIZED = True
         fetch_and_analyze_daily_data()
     except Exception as e:
@@ -107,12 +107,13 @@ def index():
     
     if LATEST_METRICS["soil_moisture"] < 26.0:
         status = "Needs Irrigation"
-        status_color, marker_color = "red", "red"
+        marker_color = "red"
     else:
         status = "Satisfactory"
-        status_color, marker_color = "cyan", "green"
+        marker_color = "green"
 
-    m = folium.Map(location=[-0.5450, 35.5650], zoom_start=13, tiles=None, control_scale=True)
+    # Centered dynamically over the core cluster coordinates (-0.5510, 35.5780)
+    m = folium.Map(location=[-0.5510, 35.5780], zoom_start=13, tiles=None, control_scale=True)
     folium.TileLayer("OpenStreetMap", name="Vector Map").add_to(m)
     folium.TileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", attr="Google", name="Satellite Backdrop").add_to(m)
 
@@ -122,7 +123,9 @@ def index():
 
     for fid, f in FARM_REGISTRY.items():
         if f["boundary"]:
-            folium.Polygon(locations=f["boundary"], color=status_color, weight=2, fill=True, fill_opacity=0.12).add_to(m)
+            # If it's a dynamic user injection, draw with bright cyan. Otherwise use the status color.
+            outline_color = "cyan" if f.get("is_new") else ("red" if marker_color == "red" else "darkblue")
+            folium.Polygon(locations=f["boundary"], color=outline_color, weight=3, fill=True, fill_opacity=0.25).add_to(m)
             
         popup_html = f"<h5><b>{f['owner']}</b></h5><b>Crop:</b> {f['crop']}<br><b>UTM Easting:</b> {f['utm_x']:.1f}m<br><b>UTM Northing:</b> {f['utm_y']:.1f}m<br><hr style='margin:4px 0;'><b>🛰️ CYGNSS Moisture:</b> {LATEST_METRICS['soil_moisture']:.1f}%<br><b>🌿 Sentinel-2 NDVI:</b> {LATEST_METRICS['ndvi']:.2f}<br><b>💧 CHIRPS Rainfall:</b> {LATEST_METRICS['rainfall']:.1f} mm<br><b>Status:</b> <span style='color:{marker_color}; font-weight:bold;'>{status}</span>"
         folium.Marker(location=[f["lat"], f["lon"]], popup=folium.Popup(popup_html, max_width=280), icon=folium.Icon(color=marker_color, icon="leaf")).add_to(m)
@@ -143,7 +146,7 @@ def add_farm():
         if lon and lat:
             ex, ny = wgs84_to_utm36s(lon, lat)
             new_id = f"FARM_{len(FARM_REGISTRY) + 1:03d}"
-            FARM_REGISTRY[new_id] = {"id": new_id, "owner": name, "phone": phone, "crop": crop, "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "boundary": geom}
+            FARM_REGISTRY[new_id] = {"id": new_id, "owner": name, "phone": phone, "crop": crop, "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "boundary": geom, "is_new": True}
             return redirect(url_for('index', success_msg=f"Successfully injected {name}'s dynamic plot boundary!"))
             
     return redirect(url_for('index'))
