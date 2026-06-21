@@ -54,6 +54,7 @@ def fetch_and_analyze_daily_data():
 
 def dispatch_irrigation_alerts():
     print("Initiating automated satellite-driven irrigation telemetry broadcast...")
+    initialize_database() # Ensure records are pulled from file storage first
     for fid, f in FARM_REGISTRY.items():
         name_hash = sum(ord(char) for char in f["owner"])
         simulated_moisture = LATEST_METRICS["soil_moisture"] + ((name_hash % 17) - 8)
@@ -147,15 +148,23 @@ def process_csv_rows(file_stream, append_to_file=False):
         if wkt:
             lon, lat, geom = parse_wkt_polygon(wkt)
             if lon and lat:
-                ex, ny, utm_zone = wgs84_to_utm_dynamic(lon, lat)
-                unique_id = f"FARM_{len(FARM_REGISTRY) + 1:03d}"
-                FARM_REGISTRY[unique_id] = {
-                    "id": unique_id, "owner": name, "phone": phone, "crop": crop,
-                    "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "utm_zone": utm_zone, "boundary": geom
-                }
-                added_count += 1
-                if append_to_file and writer:
-                    writer.writerow([name, phone, crop, wkt])
+                # Check for absolute duplicate entries to keep counts perfectly clean
+                duplicate_found = False
+                for existing_farm in FARM_REGISTRY.values():
+                    if existing_farm["owner"] == name and existing_farm["phone"] == phone:
+                        duplicate_found = True
+                        break
+                
+                if not duplicate_found:
+                    ex, ny, utm_zone = wgs84_to_utm_dynamic(lon, lat)
+                    unique_id = f"FARM_{len(FARM_REGISTRY) + 1:03d}"
+                    FARM_REGISTRY[unique_id] = {
+                        "id": unique_id, "owner": name, "phone": phone, "crop": crop,
+                        "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "utm_zone": utm_zone, "boundary": geom
+                    }
+                    added_count += 1
+                    if append_to_file and writer:
+                        writer.writerow([name, phone, crop, wkt])
                     
     if f_out:
         f_out.close()
