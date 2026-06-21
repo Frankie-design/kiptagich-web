@@ -12,7 +12,7 @@ app = Flask(__name__)
 
 # --- AFRICA'S TALKING SANDBOX SYSTEM CONFIG ---
 AT_USERNAME = "sandbox"
-AT_API_KEY = "YOUR_ACTUAL_SANDBOX_API_KEY_HERE" 
+AT_API_KEY = "atsk_37d85845c73d9bbcd0512108e7e91979afaad6864b732799f8e1e6bd5e6e24a6505862d0" 
 africastalking.initialize(AT_USERNAME, AT_API_KEY)
 sms = africastalking.SMS
 # ----------------------------------------------
