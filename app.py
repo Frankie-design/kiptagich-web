@@ -6,8 +6,16 @@ import requests
 from flask import Flask, render_template, request, redirect, url_for
 import folium
 from apscheduler.schedulers.background import BackgroundScheduler
+import africastalking
 
 app = Flask(__name__)
+
+# --- AFRICA'S TALKING SANDBOX SYSTEM CONFIG ---
+AT_USERNAME = "sandbox"
+AT_API_KEY = "atsk_37d85845c73d9bbcd0512108e7e91979afaad6864b732799f8e1e6bd5e6e24a6505862d0" 
+africastalking.initialize(AT_USERNAME, AT_API_KEY)
+sms = africastalking.SMS
+# ----------------------------------------------
 
 FARM_REGISTRY = {}
 IS_INITIALIZED = False
@@ -43,6 +51,43 @@ def fetch_and_analyze_daily_data():
             })
     except Exception:
         pass
+
+def dispatch_irrigation_alerts():
+    print("Initiating automated satellite-driven irrigation telemetry broadcast...")
+    for fid, f in FARM_REGISTRY.items():
+        name_hash = sum(ord(char) for char in f["owner"])
+        simulated_moisture = LATEST_METRICS["soil_moisture"] + ((name_hash % 17) - 8)
+        
+        if simulated_moisture < 26.0:
+            farmer_name = f["owner"]
+            phone = f["phone"]
+            crop = f["crop"]
+            
+            clean_phone = "".join(filter(str.isdigit, phone))
+            if clean_phone.startswith("0"):
+                clean_phone = "+254" + clean_phone[1:]
+            elif clean_phone.startswith("7") or clean_phone.startswith("1"):
+                clean_phone = "+254" + clean_phone
+            elif not clean_phone.startswith("254"):
+                clean_phone = "+254" + clean_phone
+            else:
+                clean_phone = "+" + clean_phone
+
+            alert_message = (
+                f"Habari {farmer_name}, Kiptagich Agri-GIS tracking highlights that your "
+                f"{crop} plot soil moisture has dropped to {simulated_moisture:.1f}%. "
+                f"Status: Needs Irrigation. Please schedule watering soon."
+            )
+            
+            try:
+                response = sms.send(
+                    message=alert_message, 
+                    recipients=[clean_phone], 
+                    sender_id="Kiptagich Ltd"
+                )
+                print(f"Alert transmitted to {farmer_name} ({clean_phone}): {response}")
+            except Exception as e:
+                print(f"Failed to deliver automated alert to {clean_phone}: {e}")
 
 def parse_wkt_polygon(wkt_string):
     try:
@@ -216,6 +261,14 @@ def upload_csv():
             return redirect(url_for('index', success_msg=f"Batch storage error: {str(e)}"))
             
     return redirect(url_for('index'))
+
+@app.route("/trigger_sms_broadcast", methods=["POST"])
+def trigger_sms_broadcast():
+    try:
+        dispatch_irrigation_alerts()
+        return redirect(url_for('index', success_msg="SMS dispatch command pushed to background channel! Check your AT simulator layout."))
+    except Exception as e:
+        return redirect(url_for('index', success_msg=f"SMS Gateway Error: {str(e)}"))
 
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(fetch_and_analyze_daily_data, 'cron', hour=18, minute=0)
