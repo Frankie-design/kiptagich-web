@@ -5,7 +5,6 @@ import math
 import requests
 from flask import Flask, render_template, request, redirect, url_for
 import folium
-from apscheduler.schedulers.background import BackgroundScheduler
 import africastalking
 
 app = Flask(__name__)
@@ -19,7 +18,8 @@ sms = africastalking.SMS
 
 FARM_REGISTRY = {}
 IS_INITIALIZED = False
-PERSISTENT_STORAGE_FILE = "farmers.csv"
+# Renamed to v2 to completely clear out the old 99 records on Render's disk
+PERSISTENT_STORAGE_FILE = "farmers_v2.csv"
 
 LATEST_METRICS = {
     "soil_moisture": 23.8,   
@@ -53,30 +53,38 @@ def fetch_and_analyze_daily_data():
         pass
 
 def dispatch_irrigation_alerts():
-    print("Initiating automated satellite-driven irrigation telemetry broadcast...")
+    print("Initiating manual telemetry broadcast verification sequence...")
+    if os.path.exists(PERSISTENT_STORAGE_FILE):
+        try:
+            with open(PERSISTENT_STORAGE_FILE, mode='r', encoding='utf-8') as f:
+                process_csv_rows(f, append_to_file=False)
+        except Exception:
+            pass
+
+    sent_logs = []
     for fid, f in list(FARM_REGISTRY.items()):
         name_hash = sum(ord(char) for char in f["owner"])
         simulated_moisture = LATEST_METRICS["soil_moisture"] + ((name_hash % 17) - 8)
         
         if simulated_moisture < 26.0:
             farmer_name = f["owner"]
-            phone = f["phone"]
+            phone = str(f["phone"]).strip()
             crop = f["crop"]
             
             clean_phone = "".join(filter(str.isdigit, phone))
             if clean_phone.startswith("0"):
                 clean_phone = "+254" + clean_phone[1:]
-            elif clean_phone.startswith("7") or clean_phone.startswith("1"):
+            elif (clean_phone.startswith("7") or clean_phone.startswith("1")) and len(clean_phone) == 9:
                 clean_phone = "+254" + clean_phone
-            elif not clean_phone.startswith("254"):
-                clean_phone = "+254" + clean_phone
-            else:
+            elif clean_phone.startswith("254") and len(clean_phone) == 12:
                 clean_phone = "+" + clean_phone
+            elif not clean_phone.startswith("+"):
+                clean_phone = "+254" + clean_phone
 
             alert_message = (
                 f"Habari {farmer_name}, Kiptagich Agri-GIS tracking highlights that your "
                 f"{crop} plot soil moisture has dropped to {simulated_moisture:.1f}%. "
-                f"Status: Needs Irrigation. Please schedule watering soon."
+                f"Status: Needs Irrigation."
             )
             
             try:
@@ -85,9 +93,10 @@ def dispatch_irrigation_alerts():
                     recipients=[clean_phone], 
                     sender_id="Kiptagich Ltd"
                 )
-                print(f"Alert transmitted to {farmer_name} ({clean_phone}): {response}")
+                sent_logs.append(f"Success to {clean_phone}")
             except Exception as e:
-                print(f"Failed to deliver automated alert to {clean_phone}: {e}")
+                sent_logs.append(f"Failed to {clean_phone}: {str(e)}")
+    return sent_logs
 
 def parse_wkt_polygon(wkt_string):
     try:
@@ -168,20 +177,18 @@ def process_csv_rows(file_stream, append_to_file=False):
         if f_out:
             f_out.close()
         return added_count
-    except Exception as e:
-        print(f"Error processing CSV logic: {e}")
+    except Exception:
         return 0
 
 def initialize_database():
     global IS_INITIALIZED
-    if IS_INITIALIZED: 
-        return
+    if IS_INITIALIZED: return
     if os.path.exists(PERSISTENT_STORAGE_FILE):
         try:
             with open(PERSISTENT_STORAGE_FILE, mode='r', encoding='utf-8') as f:
                 process_csv_rows(f, append_to_file=False)
-        except Exception as e:
-            print(f"Error reading persistent file database: {e}")
+        except Exception:
+            pass
     IS_INITIALIZED = True
     fetch_and_analyze_daily_data()
 
@@ -268,28 +275,17 @@ def upload_csv():
         try:
             stream = file.read().decode("utf-8").splitlines()
             count = process_csv_rows(stream, append_to_file=True)
-            return redirect(url_for('index', success_msg=f"Successfully executed storage commits for {count} footprints!"))
+            return redirect(url_for('index', success_msg=f"Successfully loaded {count} farms to persistent memory!"))
         except Exception as e:
-            return redirect(url_for('index', success_msg=f"Batch storage error: {str(e)}"))
+            return redirect(url_for('index', success_msg=f"Upload error: {str(e)}"))
             
     return redirect(url_for('index'))
 
 @app.route("/trigger_sms_broadcast", methods=["GET", "POST"])
 def trigger_sms_broadcast():
-    try:
-        dispatch_irrigation_alerts()
-        return redirect(url_for('index', success_msg="SMS dispatch command pushed to background channel! Check your AT simulator layout."))
-    except Exception as e:
-        return redirect(url_for('index', success_msg=f"SMS Gateway Error: {str(e)}"))
-
-def daily_6pm_automation_sequence():
-    print("6:00 PM Automation Sequence Triggered.")
-    fetch_and_analyze_daily_data()
-    dispatch_irrigation_alerts()
-
-scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(daily_6pm_automation_sequence, 'cron', hour=18, minute=0)
-scheduler.start()
+    logs = dispatch_irrigation_alerts()
+    log_summary = " | ".join(logs)[:200]
+    return redirect(url_for('index', success_msg=f"Broadcast complete! Logs: {log_summary}"))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
