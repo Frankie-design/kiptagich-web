@@ -54,8 +54,7 @@ def fetch_and_analyze_daily_data():
 
 def dispatch_irrigation_alerts():
     print("Initiating automated satellite-driven irrigation telemetry broadcast...")
-    initialize_database() # Ensure records are pulled from file storage first
-    for fid, f in FARM_REGISTRY.items():
+    for fid, f in list(FARM_REGISTRY.items()):
         name_hash = sum(ord(char) for char in f["owner"])
         simulated_moisture = LATEST_METRICS["soil_moisture"] + ((name_hash % 17) - 8)
         
@@ -127,58 +126,62 @@ def wgs84_to_utm_dynamic(lon, lat):
 
 def process_csv_rows(file_stream, append_to_file=False):
     global FARM_REGISTRY
-    reader = csv.DictReader(file_stream)
-    added_count = 0
-    file_exists = os.path.exists(PERSISTENT_STORAGE_FILE)
-    f_out = None
-    writer = None
-    
-    if append_to_file:
-        f_out = open(PERSISTENT_STORAGE_FILE, mode='a', newline='', encoding='utf-8')
-        writer = csv.writer(f_out)
-        if not file_exists:
-            writer.writerow(["farmer_name", "phone_number", "crop_type", "geom_polygon"])
-
-    for row in reader:
-        wkt = row.get("geom_polygon", "").strip()
-        name = row.get("farmer_name", "Unknown").strip()
-        phone = row.get("phone_number", "N/A").strip()
-        crop = row.get("crop_type", "N/A").strip()
+    try:
+        reader = csv.DictReader(file_stream)
+        added_count = 0
+        file_exists = os.path.exists(PERSISTENT_STORAGE_FILE)
+        f_out = None
+        writer = None
         
-        if wkt:
-            lon, lat, geom = parse_wkt_polygon(wkt)
-            if lon and lat:
-                # Check for absolute duplicate entries to keep counts perfectly clean
-                duplicate_found = False
-                for existing_farm in FARM_REGISTRY.values():
-                    if existing_farm["owner"] == name and existing_farm["phone"] == phone:
-                        duplicate_found = True
-                        break
-                
-                if not duplicate_found:
-                    ex, ny, utm_zone = wgs84_to_utm_dynamic(lon, lat)
-                    unique_id = f"FARM_{len(FARM_REGISTRY) + 1:03d}"
-                    FARM_REGISTRY[unique_id] = {
-                        "id": unique_id, "owner": name, "phone": phone, "crop": crop,
-                        "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "utm_zone": utm_zone, "boundary": geom
-                    }
-                    added_count += 1
-                    if append_to_file and writer:
-                        writer.writerow([name, phone, crop, wkt])
+        if append_to_file:
+            f_out = open(PERSISTENT_STORAGE_FILE, mode='a', newline='', encoding='utf-8')
+            writer = csv.writer(f_out)
+            if not file_exists:
+                writer.writerow(["farmer_name", "phone_number", "crop_type", "geom_polygon"])
+
+        for row in reader:
+            wkt = row.get("geom_polygon", "").strip()
+            name = row.get("farmer_name", "Unknown").strip()
+            phone = row.get("phone_number", "N/A").strip()
+            crop = row.get("crop_type", "N/A").strip()
+            
+            if wkt:
+                lon, lat, geom = parse_wkt_polygon(wkt)
+                if lon and lat:
+                    duplicate_found = False
+                    for existing_farm in FARM_REGISTRY.values():
+                        if existing_farm["owner"] == name and existing_farm["phone"] == phone:
+                            duplicate_found = True
+                            break
                     
-    if f_out:
-        f_out.close()
-    return added_count
+                    if not duplicate_found:
+                        ex, ny, utm_zone = wgs84_to_utm_dynamic(lon, lat)
+                        unique_id = f"FARM_{len(FARM_REGISTRY) + 1:03d}"
+                        FARM_REGISTRY[unique_id] = {
+                            "id": unique_id, "owner": name, "phone": phone, "crop": crop,
+                            "lat": lat, "lon": lon, "utm_x": ex, "utm_y": ny, "utm_zone": utm_zone, "boundary": geom
+                        }
+                        added_count += 1
+                        if append_to_file and writer:
+                            writer.writerow([name, phone, crop, wkt])
+                        
+        if f_out:
+            f_out.close()
+        return added_count
+    except Exception as e:
+        print(f"Error processing CSV logic: {e}")
+        return 0
 
 def initialize_database():
     global IS_INITIALIZED
-    if IS_INITIALIZED: return
+    if IS_INITIALIZED: 
+        return
     if os.path.exists(PERSISTENT_STORAGE_FILE):
         try:
             with open(PERSISTENT_STORAGE_FILE, mode='r', encoding='utf-8') as f:
                 process_csv_rows(f, append_to_file=False)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error reading persistent file database: {e}")
     IS_INITIALIZED = True
     fetch_and_analyze_daily_data()
 
