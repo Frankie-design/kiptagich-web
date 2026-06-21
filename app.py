@@ -12,7 +12,7 @@ app = Flask(__name__)
 
 # --- AFRICA'S TALKING SANDBOX SYSTEM CONFIG ---
 AT_USERNAME = "sandbox"
-AT_API_KEY = "atsk_37d85845c73d9bbcd0512108e7e91979afaad6864b732799f8e1e6bd5e6e24a6505862d0" 
+AT_API_KEY = "YOUR_ACTUAL_SANDBOX_API_KEY_HERE" 
 africastalking.initialize(AT_USERNAME, AT_API_KEY)
 sms = africastalking.SMS
 # ----------------------------------------------
@@ -190,89 +190,4 @@ def index():
     initialize_database()
     success_msg = request.args.get("success_msg")
     
-    m = folium.Map(location=[-0.5510, 35.5780], zoom_start=13, tiles=None, control_scale=True)
-    folium.TileLayer("OpenStreetMap", name="Vector Map").add_to(m)
-    folium.TileLayer("https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", attr="Google", name="Satellite Backdrop").add_to(m)
-
-    kml_polygon_coords = load_kml_boundary()
-    if kml_polygon_coords:
-        folium.Polygon(locations=kml_polygon_coords, color="purple", weight=3, fill=False).add_to(m)
-
-    all_points = []
-    if kml_polygon_coords:
-        all_points.extend(kml_polygon_coords)
-
-    for fid, f in FARM_REGISTRY.items():
-        if f["boundary"]:
-            folium.Polygon(locations=f["boundary"], color="darkblue", weight=2, fill=True, fill_opacity=0.2).add_to(m)
-            all_points.extend(f["boundary"])
-            
-        name_hash = sum(ord(char) for char in f["owner"])
-        simulated_moisture = LATEST_METRICS["soil_moisture"] + ((name_hash % 17) - 8)
-        simulated_ndvi = min(0.85, max(0.15, LATEST_METRICS["ndvi"] + ((name_hash % 5) * 0.04 - 0.08)))
-        
-        if simulated_moisture < 26.0:
-            status = "Needs Irrigation"
-            marker_color = "red"
-        else:
-            status = "Satisfactory"
-            marker_color = "green"
-            
-        popup_html = (
-            f"<h5><b>{f['owner']}</b></h5>"
-            f"<b>Crop:</b> {f['crop']}<br>"
-            f"<b>UTM Zone:</b> {f['utm_zone']}<br>"
-            f"<b>UTM Easting:</b> {f['utm_x']:.1f}m<br>"
-            f"<b>UTM Northing:</b> {f['utm_y']:.1f}m<br><hr style='margin:4px 0;'>"
-            f"<b>📡 CYGNSS Moisture:</b> {simulated_moisture:.1f}%<br>"
-            f"<b>🌿 Sentinel-2 NDVI:</b> {simulated_ndvi:.2f}<br>"
-            f"<b>Status:</b> <span style='color:{marker_color}; font-weight:bold;'>{status}</span>"
-        )
-        folium.Marker(location=[f["lat"], f["lon"]], popup=folium.Popup(popup_html, max_width=280), icon=folium.Icon(color=marker_color, icon="leaf")).add_to(m)
-
-    if all_points:
-        m.fit_bounds(all_points)
-
-    folium.LayerControl().add_to(m)
-    
-    raw_map_html = m._repr_html_()
-    fixed_map_html = raw_map_html.replace(
-        '<div ', 
-        '<div style="width:100%; height:100vh; margin:0; padding:0; overflow:hidden;" ', 
-        1
-    )
-    
-    return render_template("dashboard.html", map_html=fixed_map_html, total_farms=len(FARM_REGISTRY), success_msg=success_msg)
-
-@app.route("/upload_csv", methods=["POST"])
-def upload_csv():
-    if 'csv_file' not in request.files:
-        return redirect(url_for('index'))
-    file = request.files['csv_file']
-    if file.filename == '':
-        return redirect(url_for('index'))
-        
-    if file and file.filename.endswith('.csv'):
-        try:
-            stream = file.read().decode("utf-8").splitlines()
-            count = process_csv_rows(stream, append_to_file=True)
-            return redirect(url_for('index', success_msg=f"Successfully executed storage commits for {count} footprints!"))
-        except Exception as e:
-            return redirect(url_for('index', success_msg=f"Batch storage error: {str(e)}"))
-            
-    return redirect(url_for('index'))
-
-@app.route("/trigger_sms_broadcast", methods=["POST"])
-def trigger_sms_broadcast():
-    try:
-        dispatch_irrigation_alerts()
-        return redirect(url_for('index', success_msg="SMS dispatch command pushed to background channel! Check your AT simulator layout."))
-    except Exception as e:
-        return redirect(url_for('index', success_msg=f"SMS Gateway Error: {str(e)}"))
-
-scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(fetch_and_analyze_daily_data, 'cron', hour=18, minute=0)
-scheduler.start()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
+    m =
